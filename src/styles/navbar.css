@@ -1,0 +1,259 @@
+/* ==========================================================================
+   Navbar & Métricas Interactivas (Menú de Navegación)
+   ========================================================================== */
+
+.money-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 2.5rem;
+  background: #061122;
+  border-bottom: 1px solid #162a4a;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+}
+
+.nav-title-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.brand-badge {
+  background: linear-gradient(180deg, #1f3b64 0%, #10213b 100%);
+  border: 1px solid #2b4f84;
+  color: #60a5fa;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.brand-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+}
+
+.nav-controls-and-metrics {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+/* Selector de Período */
+.period-toggle-box {
+  display: flex;
+  align-items: center;
+  background: #0f1e36;
+  border: 1px solid #1a3154;
+  border-radius: 8px;
+  padding: 0.3rem;
+  gap: 0.35rem;
+}
+
+.period-button-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.period-button-group.active-group {
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid #1e3a63;
+  padding: 0.15rem 0.35rem;
+}
+
+.inline-select-group {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.period-sub-select {
+  background-color: #0b172a;
+  border: 1px solid #24416d;
+  color: #38bdf8;
+  font-size: 0.8rem;
+  font-weight: 700;
+  height: 32px;
+  padding: 0 0.55rem;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.period-sub-select:hover {
+  border-color: #38bdf8;
+  background-color: #0f1e36;
+}
+
+.period-sub-select:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.period-sub-select option {
+  background-color: #061122;
+  color: #ffffff;
+}
+
+.btn-period {
+  padding: 0.5rem 0.9rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-period:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.btn-period.active {
+  background: linear-gradient(180deg, #2b394e 0%, #152238 100%);
+  border: 1px solid #3e5069;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+/* Tarjetas métricas interactivas */
+.nav-metrics-container {
+  display: flex;
+  gap: 0.85rem;
+}
+
+.metric-box {
+  background: linear-gradient(180deg, #24354c 0%, #101c2d 100%);
+  border: 1px solid #334b6b;
+  border-radius: 8px;
+  padding: 0.5rem 1.15rem;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.metric-nav-btn {
+  cursor: pointer;
+  user-select: none;
+}
+
+.metric-nav-btn:hover {
+  transform: translateY(-2px);
+  border-color: #60a5fa;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+
+.metric-nav-btn.active-nav-card {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 1px #38bdf8, 0 4px 14px rgba(56, 189, 248, 0.25);
+  background: linear-gradient(180deg, #2e4666 0%, #15263d 100%);
+}
+
+.metric-lbl {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+}
+
+.metric-val {
+  font-size: 1.15rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.box-sales .metric-val { color: #38bdf8; }
+.box-expenses .metric-val { color: #f87171; }
+.box-total-pos .metric-val { color: #4ade80; }
+.box-total-neg .metric-val { color: #ef4444; }
+
+.box-shirts-total {
+  border-color: #2b456b;
+}
+
+.metric-val-shirts {
+  color: #60a5fa;
+}
+
+.metric-unit {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #94a3b8;
+  margin-left: 0.15rem;
+}
+
+/* ==========================================================================
+   BREAKPOINT ADELANTADO: SE ADAPTA EN PANTALLAS < 1024px
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .money-nav {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 1rem 1.25rem;
+    gap: 1rem;
+  }
+
+  .nav-title-group {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .nav-controls-and-metrics {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.85rem;
+  }
+
+  .period-toggle-box {
+    width: 100%;
+    overflow-x: auto;
+    padding: 0.35rem;
+    justify-content: flex-start;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .period-toggle-box::-webkit-scrollbar {
+    display: none;
+  }
+
+  .nav-metrics-container {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .metric-box {
+    min-width: 0;
+    padding: 0.6rem 0.5rem;
+    align-items: center;
+    text-align: center;
+  }
+
+  .metric-lbl {
+    font-size: 0.65rem;
+  }
+
+  .metric-val {
+    font-size: 1.05rem;
+  }
+}
