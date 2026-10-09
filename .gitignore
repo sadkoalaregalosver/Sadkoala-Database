@@ -30,3 +30,5 @@ Thumbs.db
 # Copias de seguridad o archivos sueltos
 *.bak
 *.tmp
+.vercel
+.env*
