@@ -344,7 +344,7 @@ export default function MoneyControl() {
     if (filterMode === 'year') return `Año ${selectedYear}`;
     if (filterMode === 'quarter') {
       const q = QUARTERS.find((item) => item.id === selectedQuarter);
-      return `${q ? q.name : selectedQuarter} - ${selectedYear}`;
+      return `${q ? q.name : selectedQuarter} ${selectedYear}`;
     }
     return '';
   };
@@ -359,7 +359,7 @@ export default function MoneyControl() {
 
   return (
     <div className="money-page">
-      {/* NAVBAR */}
+      {/* NAVBAR SUPERIOR FIJO */}
       <header className="money-nav">
         <div className="nav-title-group">
           <span className="brand-badge">SAD KOALA</span>
@@ -531,6 +531,82 @@ export default function MoneyControl() {
             </div>
           </nav>
         </div>
+
+        {/* CONTROLES INTEGRADOS AL HEADER FIJO (NUNCA SE METEN DETRÁS NI SE MUEVEN POR DRAG) */}
+        {activeTab === 'inventory' && (
+          <div
+            style={{
+              width: '100%',
+              marginTop: '0.5rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.35rem',
+              touchAction: 'none',
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
+            }}
+          >
+            {/* BOTÓN + CREAR NUEVO COLOR */}
+            <button
+              type="button"
+              className="btn-add-shirt-card"
+              style={{
+                width: '100%',
+                margin: 0,
+                touchAction: 'manipulation',
+              }}
+              onClick={() => setIsAddShirtModalOpen(true)}
+            >
+              + Crear Nuevo Color
+            </button>
+
+            {/* FILTROS DE GÉNERO */}
+            <div
+              className="inventory-controls-bar"
+              style={{
+                margin: 0,
+                padding: 0,
+                touchAction: 'none',
+              }}
+            >
+              <div className="gender-toggle-group" style={{ margin: 0, width: '100%' }}>
+                <button
+                  type="button"
+                  className={`btn-gender-filter ${
+                    inventoryGenderFilter === 'Todos' ? 'active' : ''
+                  }`}
+                  style={{ touchAction: 'manipulation' }}
+                  onClick={() => setInventoryGenderFilter('Todos')}
+                  title="Mostrar todos los géneros"
+                >
+                  👥 Todos
+                </button>
+                <button
+                  type="button"
+                  className={`btn-gender-filter btn-gender-male ${
+                    inventoryGenderFilter === 'Hombre' ? 'active' : ''
+                  }`}
+                  style={{ touchAction: 'manipulation' }}
+                  onClick={() => setInventoryGenderFilter('Hombre')}
+                  title="Solo playeras de Hombre"
+                >
+                  <span className="gender-symbol">♂</span> Hombre
+                </button>
+                <button
+                  type="button"
+                  className={`btn-gender-filter btn-gender-female ${
+                    inventoryGenderFilter === 'Mujer' ? 'active' : ''
+                  }`}
+                  style={{ touchAction: 'manipulation' }}
+                  onClick={() => setInventoryGenderFilter('Mujer')}
+                  title="Solo playeras de Mujer"
+                >
+                  <span className="gender-symbol">♀</span> Mujer
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* CONTENIDO PRINCIPAL */}
@@ -648,64 +724,9 @@ export default function MoneyControl() {
             {/* VISTA 2: ALMACÉN DE PLAYERAS */}
             {activeTab === 'inventory' && (
               <section className="inventory-section">
-                <div className="inventory-header">
-                  <div className="inventory-title-group">
-                    <h2 className="section-title">Control de Playeras en Bodega</h2>
-                    <div className="stock-total-badge">
-                      Total Almacenado:{' '}
-                      <strong>{totalShirtsStock} piezas</strong>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="btn-add-shirt-card"
-                      onClick={() => setIsAddShirtModalOpen(true)}
-                    >
-                      + Crear Nuevo Color
-                    </button>
-                  </div>
-
-                  <div className="inventory-controls-bar">
-                    <div className="gender-toggle-group">
-                      <button
-                        type="button"
-                        className={`btn-gender-filter ${
-                          inventoryGenderFilter === 'Todos' ? 'active' : ''
-                        }`}
-                        onClick={() => setInventoryGenderFilter('Todos')}
-                        title="Mostrar todos los géneros"
-                      >
-                        👥 Todos
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn-gender-filter btn-gender-male ${
-                          inventoryGenderFilter === 'Hombre' ? 'active' : ''
-                        }`}
-                        onClick={() => setInventoryGenderFilter('Hombre')}
-                        title="Solo playeras de Hombre"
-                      >
-                        <span className="gender-symbol">♂</span> Hombre
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn-gender-filter btn-gender-female ${
-                          inventoryGenderFilter === 'Mujer' ? 'active' : ''
-                        }`}
-                        onClick={() => setInventoryGenderFilter('Mujer')}
-                        title="Solo playeras de Mujer"
-                      >
-                        <span className="gender-symbol">♀</span> Mujer
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
                 {filteredInventory.length === 0 ? (
                   <div className="empty-box">
                     No hay playeras registradas en tu tabla <code>shirt_inventory</code> de Supabase.
-                    <br />
-                    Haz clic arriba en <strong>"+ Crear Nuevo Color"</strong> para registrar una o agrégalas desde el panel de Supabase.
                   </div>
                 ) : (
                   <div className="inventory-matrix-grid">
