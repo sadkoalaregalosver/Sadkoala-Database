@@ -1,7 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
-import { useState, useEffect, useMemo } from 'react';
-import { supabase } from './supabaseClient';
 import TransactionModal from './TransactionModal';
 import './styles/base.css';
 import './styles/navbar.css';
