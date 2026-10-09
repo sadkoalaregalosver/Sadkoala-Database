@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
+import { useState, useEffect, useMemo } from 'react';
+import { supabase } from './supabaseClient';
 import TransactionModal from './TransactionModal';
 import './styles/base.css';
 import './styles/navbar.css';
@@ -359,33 +361,123 @@ export default function MoneyControl() {
 
   return (
     <div className="money-page">
-      {/* NAVBAR SUPERIOR FIJO */}
-      <header className="money-nav">
-        <div className="nav-title-group">
-          <span className="brand-badge">SAD KOALA</span>
-          <h1 className="brand-title">Control Financiero</h1>
-        </div>
+      {/* HEADER SUPERIOR FIJO */}
+      <header
+        className="money-nav"
+        style={{
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '0.6rem',
+        }}
+      >
+        {/* CONTENEDOR CENTRAL ALINEADO */}
+        <div
+          style={{
+            width: '100%',
+            maxWidth: '900px',
+            margin: '0 auto',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.6rem',
+          }}
+        >
+          {/* TÍTULO Y CONTROLES DE PERIODO */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.6rem',
+              width: '100%',
+            }}
+          >
+            <div className="nav-title-group" style={{ margin: 0 }}>
+              <span className="brand-badge">SAD KOALA</span>
+              <h1 className="brand-title">Control Financiero</h1>
+            </div>
 
-        <div className="nav-controls-and-metrics">
-          <div className="period-toggle-box">
+            {/* SELECTOR DE PERIODO ADAPTABLE (SIN SOLAPAMIENTO) */}
             <div
-              className={`period-button-group ${
-                filterMode === 'quarter' ? 'active-group' : ''
-              }`}
+              style={{
+                width: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.4rem',
+              }}
             >
-              <button
-                type="button"
-                className={`btn-period ${
-                  filterMode === 'quarter' ? 'active' : ''
-                }`}
-                onClick={() => setFilterMode('quarter')}
+              {/* FILA 1: BOTONES TRIMESTRE / AÑO / TOTAL */}
+              <div
+                style={{
+                  display: 'flex',
+                  width: '100%',
+                  gap: '0.35rem',
+                  background: 'rgba(15, 23, 42, 0.6)',
+                  padding: '4px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                }}
               >
-                Trimestre
-              </button>
+                <button
+                  type="button"
+                  className={`btn-period ${filterMode === 'quarter' ? 'active' : ''}`}
+                  style={{
+                    flex: 1,
+                    padding: '0.55rem 0.2rem',
+                    textAlign: 'center',
+                    justifyContent: 'center',
+                    margin: 0,
+                  }}
+                  onClick={() => setFilterMode('quarter')}
+                >
+                  Trimestre
+                </button>
+                <button
+                  type="button"
+                  className={`btn-period ${filterMode === 'year' ? 'active' : ''}`}
+                  style={{
+                    flex: 1,
+                    padding: '0.55rem 0.2rem',
+                    textAlign: 'center',
+                    justifyContent: 'center',
+                    margin: 0,
+                  }}
+                  onClick={() => setFilterMode('year')}
+                >
+                  Año
+                </button>
+                <button
+                  type="button"
+                  className={`btn-period ${filterMode === 'total' ? 'active' : ''}`}
+                  style={{
+                    flex: 1,
+                    padding: '0.55rem 0.2rem',
+                    textAlign: 'center',
+                    justifyContent: 'center',
+                    margin: 0,
+                  }}
+                  onClick={() => setFilterMode('total')}
+                >
+                  Total
+                </button>
+              </div>
+
+              {/* FILA 2: SELECTORES DINÁMICOS SEGÚN EL MODO */}
               {filterMode === 'quarter' && (
-                <div className="inline-select-group">
+                <div style={{ display: 'flex', width: '100%', gap: '0.4rem' }}>
                   <select
                     className="period-sub-select"
+                    style={{
+                      flex: 2,
+                      minWidth: 0,
+                      padding: '0.55rem 0.6rem',
+                      background: '#0c1527',
+                      color: '#38bdf8',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                    }}
                     value={selectedQuarter}
                     onChange={(e) => setSelectedQuarter(e.target.value)}
                   >
@@ -397,6 +489,17 @@ export default function MoneyControl() {
                   </select>
                   <select
                     className="period-sub-select"
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      padding: '0.55rem 0.6rem',
+                      background: '#0c1527',
+                      color: '#38bdf8',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                    }}
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(Number(e.target.value))}
                   >
@@ -408,26 +511,21 @@ export default function MoneyControl() {
                   </select>
                 </div>
               )}
-            </div>
 
-            <div
-              className={`period-button-group ${
-                filterMode === 'year' ? 'active-group' : ''
-              }`}
-            >
-              <button
-                type="button"
-                className={`btn-period ${
-                  filterMode === 'year' ? 'active' : ''
-                }`}
-                onClick={() => setFilterMode('year')}
-              >
-                Año
-              </button>
               {filterMode === 'year' && (
-                <div className="inline-select-group">
+                <div style={{ display: 'flex', width: '100%' }}>
                   <select
                     className="period-sub-select"
+                    style={{
+                      width: '100%',
+                      padding: '0.55rem 0.6rem',
+                      background: '#0c1527',
+                      color: '#38bdf8',
+                      border: '1px solid rgba(56, 189, 248, 0.3)',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                      fontWeight: 600,
+                    }}
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(Number(e.target.value))}
                   >
@@ -439,178 +537,213 @@ export default function MoneyControl() {
                   </select>
                 </div>
               )}
-            </div>
 
-            <button
-              type="button"
-              className={`btn-period ${filterMode === 'total' ? 'active' : ''}`}
-              onClick={() => setFilterMode('total')}
-            >
-              Total
-            </button>
+              {/* CAJAS DE MÉTRICAS */}
+              <nav
+                className="nav-metrics-container"
+                style={{
+                  width: '100%',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                  gap: '0.5rem',
+                  marginTop: '0.2rem',
+                }}
+              >
+                <div
+                  className={`metric-box box-sales metric-nav-btn ${
+                    activeTab === 'transactions' ? 'active-nav-card' : ''
+                  }`}
+                  onClick={() => setActiveTab('transactions')}
+                  title="Ver Historial de Movimientos"
+                >
+                  <span className="metric-lbl">
+                    Ventas (
+                    {filterMode === 'total'
+                      ? 'Total'
+                      : filterMode === 'year'
+                      ? selectedYear
+                      : selectedQuarter}
+                    )
+                  </span>
+                  <span className="metric-val">
+                    {formatMoney(filteredMetrics.sales)}
+                  </span>
+                </div>
+
+                <div
+                  className={`metric-box box-expenses metric-nav-btn ${
+                    activeTab === 'transactions' ? 'active-nav-card' : ''
+                  }`}
+                  onClick={() => setActiveTab('transactions')}
+                  title="Ver Historial de Movimientos"
+                >
+                  <span className="metric-lbl">
+                    Gastos (
+                    {filterMode === 'total'
+                      ? 'Total'
+                      : filterMode === 'year'
+                      ? selectedYear
+                      : selectedQuarter}
+                    )
+                  </span>
+                  <span className="metric-val">
+                    {formatMoney(filteredMetrics.expenses)}
+                  </span>
+                </div>
+
+                {/* NETO */}
+                <div
+                  className={`metric-box metric-nav-btn ${
+                    filteredMetrics.total >= 0 ? 'box-total-pos' : 'box-total-neg'
+                  } ${activeTab === 'transactions' ? 'active-nav-card' : ''}`}
+                  onClick={() => setActiveTab('transactions')}
+                  title="Clic para ver Historial de Movimientos"
+                >
+                  <span className="metric-lbl">
+                    Neto (
+                    {filterMode === 'total'
+                      ? 'Total'
+                      : filterMode === 'year'
+                      ? selectedYear
+                      : selectedQuarter}
+                    )
+                  </span>
+                  <span className="metric-val">
+                    {formatMoney(filteredMetrics.total)}
+                  </span>
+                </div>
+
+                {/* PLAYERAS STOCK */}
+                <div
+                  className={`metric-box box-shirts-total metric-nav-btn ${
+                    activeTab === 'inventory' ? 'active-nav-card' : ''
+                  }`}
+                  onClick={() => setActiveTab('inventory')}
+                  title="Clic para ver Almacén de Playeras"
+                >
+                  <span className="metric-lbl">Playeras Stock</span>
+                  <span className="metric-val metric-val-shirts">
+                    {totalShirtsStock} <span className="metric-unit">pzas</span>
+                  </span>
+                </div>
+              </nav>
+            </div>
           </div>
 
-          {/* CAJAS DE MÉTRICAS */}
-          <nav className="nav-metrics-container">
+          {/* FILA DE CONTROLES INVENTARIO: EXPANDIBLE Y BLOQUEADA CONTRA ARRASTRE */}
+          {activeTab === 'inventory' && (
             <div
-              className={`metric-box box-sales metric-nav-btn ${
-                activeTab === 'transactions' ? 'active-nav-card' : ''
-              }`}
-              onClick={() => setActiveTab('transactions')}
-              title="Ver Historial de Movimientos"
-            >
-              <span className="metric-lbl">
-                Ventas (
-                {filterMode === 'total'
-                  ? 'Total'
-                  : filterMode === 'year'
-                  ? selectedYear
-                  : selectedQuarter}
-                )
-              </span>
-              <span className="metric-val">
-                {formatMoney(filteredMetrics.sales)}
-              </span>
-            </div>
-
-            <div
-              className={`metric-box box-expenses metric-nav-btn ${
-                activeTab === 'transactions' ? 'active-nav-card' : ''
-              }`}
-              onClick={() => setActiveTab('transactions')}
-              title="Ver Historial de Movimientos"
-            >
-              <span className="metric-lbl">
-                Gastos (
-                {filterMode === 'total'
-                  ? 'Total'
-                  : filterMode === 'year'
-                  ? selectedYear
-                  : selectedQuarter}
-                )
-              </span>
-              <span className="metric-val">
-                {formatMoney(filteredMetrics.expenses)}
-              </span>
-            </div>
-
-            {/* NETO */}
-            <div
-              className={`metric-box metric-nav-btn ${
-                filteredMetrics.total >= 0 ? 'box-total-pos' : 'box-total-neg'
-              } ${activeTab === 'transactions' ? 'active-nav-card' : ''}`}
-              onClick={() => setActiveTab('transactions')}
-              title="Clic para ver Historial de Movimientos"
-            >
-              <span className="metric-lbl">
-                Neto (
-                {filterMode === 'total'
-                  ? 'Total'
-                  : filterMode === 'year'
-                  ? selectedYear
-                  : selectedQuarter}
-                )
-              </span>
-              <span className="metric-val">
-                {formatMoney(filteredMetrics.total)}
-              </span>
-            </div>
-
-            {/* PLAYERAS STOCK */}
-            <div
-              className={`metric-box box-shirts-total metric-nav-btn ${
-                activeTab === 'inventory' ? 'active-nav-card' : ''
-              }`}
-              onClick={() => setActiveTab('inventory')}
-              title="Clic para ver Almacén de Playeras"
-            >
-              <span className="metric-lbl">Playeras Stock</span>
-              <span className="metric-val metric-val-shirts">
-                {totalShirtsStock} <span className="metric-unit">pzas</span>
-              </span>
-            </div>
-          </nav>
-        </div>
-
-        {/* CONTROLES INTEGRADOS AL HEADER FIJO (NUNCA SE METEN DETRÁS NI SE MUEVEN POR DRAG) */}
-        {activeTab === 'inventory' && (
-          <div
-            style={{
-              width: '100%',
-              marginTop: '0.5rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.35rem',
-              touchAction: 'none',
-              userSelect: 'none',
-              WebkitUserSelect: 'none',
-            }}
-          >
-            {/* BOTÓN + CREAR NUEVO COLOR */}
-            <button
-              type="button"
-              className="btn-add-shirt-card"
               style={{
                 width: '100%',
-                margin: 0,
-                touchAction: 'manipulation',
-              }}
-              onClick={() => setIsAddShirtModalOpen(true)}
-            >
-              + Crear Nuevo Color
-            </button>
-
-            {/* FILTROS DE GÉNERO */}
-            <div
-              className="inventory-controls-bar"
-              style={{
-                margin: 0,
-                padding: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.4rem',
                 touchAction: 'none',
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
               }}
             >
-              <div className="gender-toggle-group" style={{ margin: 0, width: '100%' }}>
-                <button
-                  type="button"
-                  className={`btn-gender-filter ${
-                    inventoryGenderFilter === 'Todos' ? 'active' : ''
-                  }`}
-                  style={{ touchAction: 'manipulation' }}
-                  onClick={() => setInventoryGenderFilter('Todos')}
-                  title="Mostrar todos los géneros"
+              {/* BOTÓN + CREAR NUEVO COLOR */}
+              <button
+                type="button"
+                className="btn-add-shirt-card"
+                style={{
+                  width: '100%',
+                  padding: '0.7rem 1.25rem',
+                  fontSize: '0.95rem',
+                  margin: 0,
+                  touchAction: 'manipulation',
+                }}
+                onClick={() => setIsAddShirtModalOpen(true)}
+              >
+                + Crear Nuevo Color
+              </button>
+
+              {/* BOTONES TODOS / HOMBRE / MUJER EXPANDIDOS */}
+              <div
+                className="inventory-controls-bar"
+                style={{
+                  margin: 0,
+                  padding: 0,
+                  width: '100%',
+                  touchAction: 'none',
+                }}
+              >
+                <div
+                  className="gender-toggle-group"
+                  style={{
+                    margin: 0,
+                    width: '100%',
+                    display: 'flex',
+                    gap: '0.5rem',
+                  }}
                 >
-                  👥 Todos
-                </button>
-                <button
-                  type="button"
-                  className={`btn-gender-filter btn-gender-male ${
-                    inventoryGenderFilter === 'Hombre' ? 'active' : ''
-                  }`}
-                  style={{ touchAction: 'manipulation' }}
-                  onClick={() => setInventoryGenderFilter('Hombre')}
-                  title="Solo playeras de Hombre"
-                >
-                  <span className="gender-symbol">♂</span> Hombre
-                </button>
-                <button
-                  type="button"
-                  className={`btn-gender-filter btn-gender-female ${
-                    inventoryGenderFilter === 'Mujer' ? 'active' : ''
-                  }`}
-                  style={{ touchAction: 'manipulation' }}
-                  onClick={() => setInventoryGenderFilter('Mujer')}
-                  title="Solo playeras de Mujer"
-                >
-                  <span className="gender-symbol">♀</span> Mujer
-                </button>
+                  <button
+                    type="button"
+                    className={`btn-gender-filter ${
+                      inventoryGenderFilter === 'Todos' ? 'active' : ''
+                    }`}
+                    style={{
+                      flex: 1,
+                      padding: '0.65rem 0.5rem',
+                      fontSize: '0.95rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      touchAction: 'manipulation',
+                    }}
+                    onClick={() => setInventoryGenderFilter('Todos')}
+                    title="Mostrar todos los géneros"
+                  >
+                    👥 Todos
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn-gender-filter btn-gender-male ${
+                      inventoryGenderFilter === 'Hombre' ? 'active' : ''
+                    }`}
+                    style={{
+                      flex: 1,
+                      padding: '0.65rem 0.5rem',
+                      fontSize: '0.95rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      touchAction: 'manipulation',
+                    }}
+                    onClick={() => setInventoryGenderFilter('Hombre')}
+                    title="Solo playeras de Hombre"
+                  >
+                    <span className="gender-symbol" style={{ marginRight: '0.25rem' }}>♂</span> Hombre
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn-gender-filter btn-gender-female ${
+                      inventoryGenderFilter === 'Mujer' ? 'active' : ''
+                    }`}
+                    style={{
+                      flex: 1,
+                      padding: '0.65rem 0.5rem',
+                      fontSize: '0.95rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      touchAction: 'manipulation',
+                    }}
+                    onClick={() => setInventoryGenderFilter('Mujer')}
+                    title="Solo playeras de Mujer"
+                  >
+                    <span className="gender-symbol" style={{ marginRight: '0.25rem' }}>♀</span> Mujer
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </header>
 
       {/* CONTENIDO PRINCIPAL */}
-      <main className="money-main">
+      <main className="money-main" style={{ maxWidth: '900px', margin: '0 auto', width: '100%' }}>
         {loading ? (
           <div className="empty-box" style={{ padding: '3rem', fontSize: '1.1rem' }}>
             ⚡ Consultando Supabase...
@@ -723,13 +856,13 @@ export default function MoneyControl() {
 
             {/* VISTA 2: ALMACÉN DE PLAYERAS */}
             {activeTab === 'inventory' && (
-              <section className="inventory-section">
+              <section className="inventory-section" style={{ width: '100%', margin: 0, padding: 0 }}>
                 {filteredInventory.length === 0 ? (
                   <div className="empty-box">
                     No hay playeras registradas en tu tabla <code>shirt_inventory</code> de Supabase.
                   </div>
                 ) : (
-                  <div className="inventory-matrix-grid">
+                  <div className="inventory-matrix-grid" style={{ width: '100%' }}>
                     {filteredInventory.map((item) => {
                       const hexColor = getColorHex(item);
                       const isLight = isColorLight(hexColor);
