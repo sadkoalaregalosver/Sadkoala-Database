@@ -116,10 +116,43 @@ export default function MoneyControl() {
   // OPERACIONES CRUD DIRECTAS EN SUPABASE
   // ==========================================
 
-  // 1. Guardar nueva transacción
+  // 1. Guardar nueva transacción y procesar stock si aplica
   const handleSaveTransaction = async (newTx) => {
     setTransactions((prev) => [newTx, ...prev]);
 
+    // Si la venta incluye deducciones automáticas de playeras
+    if (newTx.inventoryDeductions && newTx.inventoryDeductions.length > 0) {
+      for (const item of newTx.inventoryDeductions) {
+        const colName = `size_${item.size.toLowerCase()}`;
+        const card = inventory.find(
+          (c) =>
+            c.color.toLowerCase() === item.color.toLowerCase() &&
+            c.gender === item.gender
+        );
+
+        if (card) {
+          const currentQty = card[colName] || 0;
+          const newQty = Math.max(0, currentQty - item.quantity);
+
+          // Actualizar estado local
+          setInventory((prev) =>
+            prev.map((c) => (c.id === card.id ? { ...c, [colName]: newQty } : c))
+          );
+
+          // Actualizar stock en Supabase
+          const { error: invErr } = await supabase
+            .from('shirt_inventory')
+            .update({ [colName]: newQty })
+            .eq('id', card.id);
+
+          if (invErr) {
+            console.error('Error reduciendo stock en Supabase:', invErr);
+          }
+        }
+      }
+    }
+
+    // Insertar registro financiero en Supabase
     const { error } = await supabase.from('transactions').insert([
       {
         id: newTx.id,
@@ -395,7 +428,7 @@ export default function MoneyControl() {
               <h1 className="brand-title">Control Financiero</h1>
             </div>
 
-            {/* SELECTOR DE PERIODO ADAPTABLE (SIN SOLAPAMIENTO) */}
+            {/* SELECTOR DE PERIODO ADAPTABLE */}
             <div
               style={{
                 width: '100%',
@@ -460,7 +493,7 @@ export default function MoneyControl() {
                 </button>
               </div>
 
-              {/* FILA 2: SELECTORES DINÁMICOS SEGÚN EL MODO */}
+              {/* FILA 2: SELECTORES DINÁMICOS */}
               {filterMode === 'quarter' && (
                 <div style={{ display: 'flex', width: '100%', gap: '0.4rem' }}>
                   <select
@@ -628,7 +661,7 @@ export default function MoneyControl() {
             </div>
           </div>
 
-          {/* FILA DE CONTROLES INVENTARIO: EXPANDIBLE Y BLOQUEADA CONTRA ARRASTRE */}
+          {/* FILA DE CONTROLES INVENTARIO */}
           {activeTab === 'inventory' && (
             <div
               style={{
@@ -657,7 +690,7 @@ export default function MoneyControl() {
                 + Crear Nuevo Color
               </button>
 
-              {/* BOTONES TODOS / HOMBRE / MUJER EXPANDIDOS */}
+              {/* BOTONES TODOS / HOMBRE / MUJER */}
               <div
                 className="inventory-controls-bar"
                 style={{
@@ -1156,6 +1189,7 @@ export default function MoneyControl() {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSave={handleSaveTransaction}
+        inventory={inventory}
       />
     </div>
   );
