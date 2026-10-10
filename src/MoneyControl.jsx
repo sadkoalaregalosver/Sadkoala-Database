@@ -152,6 +152,12 @@ export default function MoneyControl() {
       }
     }
 
+    // Guardar metadata en 'details' para poder devolver el inventario si se elimina
+    const storedDetails =
+      newTx.inventoryDeductions && newTx.inventoryDeductions.length > 0
+        ? `${newTx.details || ''} __DEDUCTIONS__:${JSON.stringify(newTx.inventoryDeductions)}`
+        : newTx.details || '';
+
     // Insertar registro financiero en Supabase
     const { error } = await supabase.from('transactions').insert([
       {
@@ -161,7 +167,7 @@ export default function MoneyControl() {
         category: newTx.category,
         description: newTx.description,
         date: newTx.date,
-        details: newTx.details || '',
+        details: storedDetails,
       },
     ]);
 
@@ -190,12 +196,60 @@ export default function MoneyControl() {
     }
   };
 
-  // 3. Eliminar transacción de Supabase
+  // 3. Eliminar transacción de Supabase y devolver stock
   const promptDeleteTx = (tx) => setTxToDelete(tx);
   const cancelDeleteTx = () => setTxToDelete(null);
+
   const confirmDeleteTx = async () => {
     if (!txToDelete) return;
     const targetId = txToDelete.id;
+
+    // Detectar si la transacción eliminada descontó stock
+    let deductionsToRestore = [];
+    if (txToDelete.inventoryDeductions && txToDelete.inventoryDeductions.length > 0) {
+      deductionsToRestore = txToDelete.inventoryDeductions;
+    } else if (txToDelete.details && txToDelete.details.includes('__DEDUCTIONS__:')) {
+      try {
+        const parts = txToDelete.details.split('__DEDUCTIONS__:');
+        deductionsToRestore = JSON.parse(parts[1]);
+      } catch (err) {
+        console.error('Error interpretando deducciones previas:', err);
+      }
+    }
+
+    // Regresar las playeras al almacén en Supabase y localmente
+    if (deductionsToRestore.length > 0) {
+      for (const item of deductionsToRestore) {
+        const colName = `size_${item.size.toLowerCase()}`;
+        const card = inventory.find(
+          (c) =>
+            c.color.toLowerCase() === item.color.toLowerCase() &&
+            c.gender === item.gender
+        );
+
+        if (card) {
+          const currentQty = card[colName] || 0;
+          const restoredQty = currentQty + Number(item.quantity);
+
+          // Actualizar estado local
+          setInventory((prev) =>
+            prev.map((c) => (c.id === card.id ? { ...c, [colName]: restoredQty } : c))
+          );
+
+          // Actualizar en Supabase
+          const { error: invErr } = await supabase
+            .from('shirt_inventory')
+            .update({ [colName]: restoredQty })
+            .eq('id', card.id);
+
+          if (invErr) {
+            console.error('Error devolviendo stock a Supabase:', invErr);
+          }
+        }
+      }
+    }
+
+    // Eliminar transacción local y en Supabase
     setTransactions((prev) => prev.filter((t) => t.id !== targetId));
     setTxToDelete(null);
 
@@ -855,7 +909,9 @@ export default function MoneyControl() {
                             {tx.description}
                           </span>
                           {tx.details && (
-                            <span className="desc-sub-text">{tx.details}</span>
+                            <span className="desc-sub-text">
+                              {tx.details.split('__DEDUCTIONS__:')[0]}
+                            </span>
                           )}
                         </div>
 
@@ -1142,7 +1198,9 @@ export default function MoneyControl() {
               <div className="delete-preview-row">
                 <span className="preview-label">Detalle:</span>
                 <span className="preview-val-sub">
-                  {txToDelete.details || txToDelete.category}
+                  {txToDelete.details
+                    ? txToDelete.details.split('__DEDUCTIONS__:')[0]
+                    : txToDelete.category}
                 </span>
               </div>
               <div className="delete-preview-row">
