@@ -18,6 +18,7 @@ const INCOME_CATEGORIES = [
   'Playmat',
   'Mousepad',
   'Taza Sublimada',
+  'Otros',
 ];
 
 const EXPENSE_CATEGORIES = [
@@ -37,6 +38,7 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
 
   const [category, setCategory] = useState(INCOME_CATEGORIES[0]);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [itemDescription, setItemDescription] = useState('');
   const [note, setNote] = useState('');
 
   const [openColorDropdownId, setOpenColorDropdownId] = useState(null);
@@ -70,13 +72,13 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
 
   const isShirtOperation = category.includes('Playera');
   const isManualFreeSale = movementType === 'income' && stockDeductionMode === 'none';
+  const isOtherSale = movementType === 'income' && category === 'Otros';
   const isPrintExpense = movementType === 'expense' && category === 'Impresiones y Consumibles';
   const isMerchSale = movementType === 'income' && (category === 'Playmat' || category === 'Mousepad' || category === 'Taza Sublimada');
 
   // ==========================================
   // FILTRADO POR GÉNERO / CORTE
   // ==========================================
-  // Colores disponibles para la pieza individual según el sexo elegido
   const singleAvailableShirts = useMemo(() => {
     if (movementType === 'income' && stockDeductionMode === 'deduct') {
       return inventory.filter((item) => item.gender === singleGender);
@@ -84,12 +86,10 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
     return inventory;
   }, [inventory, singleGender, movementType, stockDeductionMode]);
 
-  // Tarjeta actualmente seleccionada en pieza individual
   const selectedShirtCard = useMemo(() => {
     return singleAvailableShirts.find((item) => item.color === singleColor) || singleAvailableShirts[0] || null;
   }, [singleAvailableShirts, singleColor]);
 
-  // Tallas disponibles con existencias para la playera seleccionada
   const availableSizesForSingle = useMemo(() => {
     if (!selectedShirtCard) return [];
     if (movementType === 'income' && stockDeductionMode === 'deduct') {
@@ -101,7 +101,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
     return ALL_SIZES.map((sz) => ({ size: sz, stock: 999 }));
   }, [selectedShirtCard, movementType, stockDeductionMode]);
 
-  // Sincronizar selección inicial al abrir o cambiar de género
   useEffect(() => {
     if (singleAvailableShirts.length > 0) {
       if (!singleColor || !singleAvailableShirts.some((s) => s.color === singleColor)) {
@@ -112,7 +111,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
     }
   }, [singleGender, singleAvailableShirts]);
 
-  // Sincronizar talla cuando cambia la playera
   useEffect(() => {
     if (availableSizesForSingle.length > 0) {
       if (!singleSize || !availableSizesForSingle.some((s) => s.size === singleSize)) {
@@ -123,9 +121,9 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
     }
   }, [availableSizesForSingle]);
 
-  // Total de unidades sumadas
   const totalUnits = useMemo(() => {
-    if (isManualFreeSale) return 1;
+    if (isOtherSale) return Number(generalQuantity) || 1;
+    if (isManualFreeSale && !isShirtOperation) return Number(generalQuantity) || 1;
     if (isShirtOperation) {
       if (purchaseMode === 'individual') return Number(singleQty) || 1;
       return dozenItems.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0);
@@ -133,7 +131,7 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
     if (isPrintExpense) return Number(printDetail.quantity) || 1;
     if (isMerchSale) return Number(merchDetail.quantity) || 1;
     return Number(generalQuantity) || 1;
-  }, [isManualFreeSale, isShirtOperation, isPrintExpense, isMerchSale, purchaseMode, singleQty, dozenItems, printDetail, merchDetail, generalQuantity]);
+  }, [isOtherSale, isManualFreeSale, isShirtOperation, isPrintExpense, isMerchSale, purchaseMode, singleQty, dozenItems, printDetail, merchDetail, generalQuantity]);
 
   const unitPriceEstimate = useMemo(() => {
     const cost = Number(totalPrice);
@@ -141,7 +139,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
     return (cost / totalUnits).toFixed(2);
   }, [totalPrice, totalUnits]);
 
-  // Modificación de filas de docena
   const handleAddDozenRow = () => {
     const firstCard = inventory.find((i) => i.gender === 'Hombre') || inventory[0];
     setDozenItems([
@@ -167,7 +164,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
         if (item.id !== rowId) return item;
         const updated = { ...item, [field]: field === 'quantity' ? Number(value) : value };
 
-        // Si cambió de género, reajustar color al primero disponible de ese género
         if (field === 'gender') {
           const validColors = inventory.filter((c) => c.gender === value);
           if (validColors.length > 0) {
@@ -231,10 +227,13 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
     if (!totalPrice || Number(totalPrice) <= 0) return;
 
     let detailsText = '';
-    let autoDesc = note;
+    let autoDesc = itemDescription.trim();
     let deductions = [];
 
-    if (isManualFreeSale) {
+    if (isOtherSale) {
+      detailsText = `${generalQuantity}x ${autoDesc || 'Venta Otros'}`;
+      if (!autoDesc) autoDesc = 'Venta Otros';
+    } else if (isManualFreeSale) {
       detailsText = `${category} [Venta Libre - Sin mover stock]`;
       if (!autoDesc) autoDesc = `Venta ${category}`;
     } else if (isShirtOperation) {
@@ -286,14 +285,15 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
       category,
       description: autoDesc,
       date,
-      mode: isManualFreeSale ? 'free' : isShirtOperation ? purchaseMode : isMerchSale ? 'merch' : isPrintExpense ? 'print' : 'general',
-      details: detailsText,
+      mode: isOtherSale ? 'other' : isManualFreeSale ? 'free' : isShirtOperation ? purchaseMode : isMerchSale ? 'merch' : isPrintExpense ? 'print' : 'general',
+      details: note ? `${detailsText} | Nota: ${note}` : detailsText,
       inventoryDeductions: deductions.length > 0 ? deductions : null,
     };
 
     onSave(newTx);
     setStep(1);
     setTotalPrice('');
+    setItemDescription('');
     setNote('');
     setOpenColorDropdownId(null);
     onClose();
@@ -302,6 +302,8 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
   const handleCancel = () => {
     setStep(1);
     setTotalPrice('');
+    setItemDescription('');
+    setNote('');
     setOpenColorDropdownId(null);
     onClose();
   };
@@ -353,7 +355,7 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
               </button>
             </div>
 
-            {/* SELECCIÓN DE MODALIDAD SI ES VENTA */}
+            {/* SELECCIÓN DE MODALIDAD SI ES VENTA DE PLAYERAS */}
             {movementType === 'income' && isShirtOperation && (
               <div
                 style={{
@@ -422,6 +424,26 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
               </div>
             </div>
 
+            {/* INPUT DE DESCRIPCIÓN DEL ARTÍCULO VENDIDO */}
+            <div className="form-group">
+              <label>Descripción / Detalle del artículo vendido</label>
+              <input
+                type="text"
+                className="money-input"
+                placeholder={
+                  isShirtOperation
+                    ? 'Ej. Playera Berserk Guts, Logo Frente y Espalda...'
+                    : category === 'Playmat'
+                    ? 'Ej. Playmat Yu-Gi-Oh Dark Magician Girl...'
+                    : category === 'Otros'
+                    ? 'Ej. Stickers holográficos, gorra bordada, llavero...'
+                    : 'Ej. Descripción o modelo del producto...'
+                }
+                value={itemDescription}
+                onChange={(e) => setItemDescription(e.target.value)}
+              />
+            </div>
+
             {/* CASO 1: PLAYERAS (SOLO SI NO ES VENTA LIBRE) */}
             {isShirtOperation && !isManualFreeSale && (
               <div className="shirt-special-box">
@@ -448,7 +470,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
                 {/* MODO PIEZA INDIVIDUAL */}
                 {purchaseMode === 'individual' && (
                   <div className="individual-card-box">
-                    {/* 1. SELECCIÓN DE SEXO PRIMERO */}
                     <div className="form-group">
                       <label>1. Sexo / Corte</label>
                       <select
@@ -464,7 +485,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
                       </select>
                     </div>
 
-                    {/* 2. PLAYERA / COLOR FILTRADO POR ESE SEXO */}
                     <div className="form-group color-custom-select-col">
                       <label>2. Color ({singleGender})</label>
                       {singleAvailableShirts.length === 0 ? (
@@ -517,7 +537,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
                       )}
                     </div>
 
-                    {/* 3. TALLA CON EXISTENCIAS ENTRE PARÉNTESIS */}
                     <div className="form-group">
                       <label>3. Talla Disponible</label>
                       <select
@@ -538,7 +557,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
                       </select>
                     </div>
 
-                    {/* 4. PIEZAS */}
                     <div className="form-group input-qty-col">
                       <label>Piezas</label>
                       <input
@@ -579,7 +597,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
                           <div key={item.id} className="variant-card-box">
                             <span className="row-num">#{index + 1}</span>
 
-                            {/* 1. SEXO */}
                             <div className="form-group">
                               <label>Sexo</label>
                               <select
@@ -595,7 +612,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
                               </select>
                             </div>
 
-                            {/* 2. COLOR FILTRADO */}
                             <div className="form-group color-custom-select-col">
                               <label>Color</label>
                               <button
@@ -638,7 +654,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
                               )}
                             </div>
 
-                            {/* 3. TALLA CON STOCK ENTRE PARÉNTESIS */}
                             <div className="form-group">
                               <label>Talla</label>
                               <select
@@ -658,7 +673,6 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
                               </select>
                             </div>
 
-                            {/* 4. PIEZAS */}
                             <div className="form-group input-qty-col">
                               <label>Piezas</label>
                               <input
@@ -695,8 +709,8 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
               </div>
             )}
 
-            {/* AVISO VISUAL SI ES VENTA LIBRE */}
-            {isManualFreeSale && (
+            {/* AVISO VISUAL SI ES VENTA LIBRE DE PLAYERAS */}
+            {isShirtOperation && isManualFreeSale && (
               <div
                 style={{
                   background: 'rgba(56, 189, 248, 0.05)',
@@ -791,25 +805,25 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
               </div>
             )}
 
-            {/* CASO 4: OTROS GASTOS GENERALES */}
-            {!isShirtOperation && !isPrintExpense && !isMerchSale && (
+            {/* CASO 4: OTROS (VENTAS O GASTOS) */}
+            {(isOtherSale || (!isShirtOperation && !isPrintExpense && !isMerchSale)) && (
               <div className="shirt-special-box">
                 <div className="mode-selector-header">
-                  <span className="box-title">Detalle del Gasto:</span>
+                  <span className="box-title">Cantidad de Unidades:</span>
                 </div>
                 <div className="generic-card-row">
                   <div className="form-group">
-                    <label>Concepto</label>
+                    <label>Categoría</label>
                     <input type="text" className="money-input" value={category} disabled />
                   </div>
                   <div className="form-group input-qty-col">
-                    <label>Cantidad</label>
+                    <label>Piezas / Unidades</label>
                     <input
                       type="number"
                       min="1"
                       className="money-input input-qty"
                       value={generalQuantity}
-                      onChange={(e) => setGeneralQuantity(Number(e.target.value))}
+                      onChange={(e) => setGeneralQuantity(Math.max(1, Number(e.target.value)))}
                     />
                   </div>
                 </div>
@@ -837,6 +851,10 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
               <span className="summary-title">Resumen de lo Seleccionado:</span>
               <div className="summary-items">
                 <div>Operación: <strong>{movementType === 'income' ? 'VENTA' : 'COMPRA / GASTO'}</strong> ({category})</div>
+
+                {itemDescription && (
+                  <div>Concepto: <strong>{itemDescription}</strong></div>
+                )}
 
                 {movementType === 'income' && isShirtOperation && (
                   <div style={{ color: stockDeductionMode === 'deduct' ? '#38bdf8' : '#f59e0b', fontSize: '0.88rem' }}>
@@ -869,7 +887,7 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
                   <div>Técnica: <strong>{printDetail.type}</strong> — {printDetail.quantity} m ({printDetail.sizeOrSpec})</div>
                 )}
 
-                {!isShirtOperation && !isPrintExpense && !isMerchSale && (
+                {(isOtherSale || (!isShirtOperation && !isPrintExpense && !isMerchSale)) && (
                   <div>Cantidad: <strong>{generalQuantity} unidad(es)</strong></div>
                 )}
               </div>
@@ -896,10 +914,10 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
             </div>
 
             <div className="form-group">
-              <label>Descripción / Nota Opcional</label>
+              <label>Notas Adicionales (Opcional)</label>
               <input
                 type="text"
-                placeholder="Ej. Cliente local, pedido especial, entrega express..."
+                placeholder="Ej. Transferencia Banamex, entregado en tienda..."
                 className="money-input"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}

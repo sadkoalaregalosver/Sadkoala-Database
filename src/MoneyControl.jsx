@@ -43,7 +43,8 @@ function isColorLight(hex) {
 }
 
 export default function MoneyControl() {
-  const [activeTab, setActiveTab] = useState('inventory');
+  // Pestaña inicial predeterminada: Historial de Entradas y Salidas
+  const [activeTab, setActiveTab] = useState('transactions');
   const [loading, setLoading] = useState(true);
 
   // Estados iniciales vacíos: SOLO leen de Supabase
@@ -715,7 +716,7 @@ export default function MoneyControl() {
             </div>
           </div>
 
-          {/* FILA DE CONTROLES INVENTARIO */}
+          {/* FILA DE CONTROLES INVENTARIO (SOLO EN PESTAÑA INVENTARIO) */}
           {activeTab === 'inventory' && (
             <div
               style={{
@@ -728,7 +729,6 @@ export default function MoneyControl() {
                 WebkitUserSelect: 'none',
               }}
             >
-              {/* BOTÓN + CREAR NUEVO COLOR */}
               <button
                 type="button"
                 className="btn-add-shirt-card"
@@ -744,7 +744,6 @@ export default function MoneyControl() {
                 + Crear Nuevo Color
               </button>
 
-              {/* BOTONES TODOS / HOMBRE / MUJER */}
               <div
                 className="inventory-controls-bar"
                 style={{
