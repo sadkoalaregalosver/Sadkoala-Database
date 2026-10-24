@@ -3,6 +3,21 @@ import { useState, useMemo, useEffect } from 'react';
 const ALL_SIZES = ['S', 'M', 'L', 'XL'];
 const GENDERS = ['Hombre', 'Mujer'];
 
+const MONTH_NAMES = [
+  { value: 1, name: 'Ene' },
+  { value: 2, name: 'Feb' },
+  { value: 3, name: 'Mar' },
+  { value: 4, name: 'Abr' },
+  { value: 5, name: 'May' },
+  { value: 6, name: 'Jun' },
+  { value: 7, name: 'Jul' },
+  { value: 8, name: 'Ago' },
+  { value: 9, name: 'Sep' },
+  { value: 10, name: 'Oct' },
+  { value: 11, name: 'Nov' },
+  { value: 12, name: 'Dic' },
+];
+
 const PRINT_TYPES = [
   'DTF Textil',
   'Sublimación',
@@ -37,7 +52,42 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
   const [stockDeductionMode, setStockDeductionMode] = useState('deduct'); // 'deduct' | 'none'
 
   const [category, setCategory] = useState(INCOME_CATEGORIES[0]);
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+
+  // Manejo de fecha con selectores individuales
+  const today = new Date();
+  const currentYearBase = today.getFullYear();
+  const [selectedDay, setSelectedDay] = useState(today.getDate());
+  const [selectedMonth, setSelectedMonth] = useState(today.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(currentYearBase);
+
+  // Rango de años: 10 años atrás hasta 50 años adelante
+  const availableYears = useMemo(() => {
+    const startYear = currentYearBase - 10;
+    const endYear = currentYearBase + 50;
+    const years = [];
+    for (let y = startYear; y <= endYear; y++) {
+      years.push(y);
+    }
+    return years;
+  }, [currentYearBase]);
+
+  const formattedDate = useMemo(() => {
+    const dStr = String(selectedDay).padStart(2, '0');
+    const mStr = String(selectedMonth).padStart(2, '0');
+    return `${selectedYear}-${mStr}-${dStr}`;
+  }, [selectedDay, selectedMonth, selectedYear]);
+
+  // Días máximos del mes seleccionado
+  const daysInCurrentMonth = useMemo(() => {
+    return new Date(selectedYear, selectedMonth, 0).getDate();
+  }, [selectedYear, selectedMonth]);
+
+  useEffect(() => {
+    if (selectedDay > daysInCurrentMonth) {
+      setSelectedDay(daysInCurrentMonth);
+    }
+  }, [daysInCurrentMonth, selectedDay]);
+
   const [itemDescription, setItemDescription] = useState('');
   const [note, setNote] = useState('');
 
@@ -284,7 +334,7 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
       amount: Math.abs(Number(totalPrice)),
       category,
       description: autoDesc,
-      date,
+      date: formattedDate,
       mode: isOtherSale ? 'other' : isManualFreeSale ? 'free' : isShirtOperation ? purchaseMode : isMerchSale ? 'merch' : isPrintExpense ? 'print' : 'general',
       details: note ? `${detailsText} | Nota: ${note}` : detailsText,
       inventoryDeductions: deductions.length > 0 ? deductions : null,
@@ -412,15 +462,71 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
                 </select>
               </div>
 
+              {/* SELECTOR DE FECHA RESPONSIVO */}
               <div className="form-group">
                 <label>Fecha</label>
-                <input
-                  type="date"
-                  className="money-input"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  required
-                />
+
+                {/* VERSIÓN MONITOR: 3 Selects con scroll rápido */}
+                <div className="desktop-date-selector" style={{ display: 'flex', gap: '0.35rem', width: '100%' }}>
+                  <select
+                    className="money-select"
+                    style={{ flex: 1.1, padding: '0.55rem 0.3rem', textAlign: 'center' }}
+                    value={selectedDay}
+                    onChange={(e) => setSelectedDay(Number(e.target.value))}
+                    title="Día"
+                  >
+                    {Array.from({ length: daysInCurrentMonth }, (_, i) => i + 1).map((d) => (
+                      <option key={d} value={d}>
+                        {d}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    className="money-select"
+                    style={{ flex: 1.4, padding: '0.55rem 0.3rem', textAlign: 'center' }}
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                    title="Mes"
+                  >
+                    {MONTH_NAMES.map((m) => (
+                      <option key={m.value} value={m.value}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    className="money-select"
+                    style={{ flex: 1.3, padding: '0.55rem 0.3rem', textAlign: 'center' }}
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(Number(e.target.value))}
+                    title="Año"
+                  >
+                    {availableYears.map((yr) => (
+                      <option key={yr} value={yr}>
+                        {yr}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* VERSIÓN MÓVIL: Input nativo táctil */}
+                <div className="mobile-date-selector" style={{ display: 'none' }}>
+                  <input
+                    type="date"
+                    className="money-input"
+                    value={formattedDate}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const [y, m, d] = e.target.value.split('-').map(Number);
+                        setSelectedYear(y);
+                        setSelectedMonth(m);
+                        setSelectedDay(d);
+                      }
+                    }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -851,6 +957,8 @@ export default function TransactionModal({ isOpen, onClose, onSave, inventory = 
               <span className="summary-title">Resumen de lo Seleccionado:</span>
               <div className="summary-items">
                 <div>Operación: <strong>{movementType === 'income' ? 'VENTA' : 'COMPRA / GASTO'}</strong> ({category})</div>
+
+                <div>Fecha: <strong>{formattedDate}</strong></div>
 
                 {itemDescription && (
                   <div>Concepto: <strong>{itemDescription}</strong></div>

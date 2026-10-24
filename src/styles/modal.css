@@ -158,6 +158,19 @@
   letter-spacing: 0.04em;
 }
 
+/* ==========================================================================
+   Selector de Fecha: Monitor vs Móvil
+   ========================================================================== */
+.desktop-date-selector {
+  display: flex !important;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.mobile-date-selector {
+  display: none !important;
+}
+
 .shirt-special-box {
   background-color: #050d1a;
   border: 1px solid #142845;
@@ -725,6 +738,15 @@
 
   .form-base-row-step1 {
     grid-template-columns: 1fr;
+  }
+
+  /* Conmutación a selector nativo en pantallas táctiles */
+  .desktop-date-selector {
+    display: none !important;
+  }
+
+  .mobile-date-selector {
+    display: block !important;
   }
 
   .individual-card-box,

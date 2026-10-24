@@ -43,13 +43,15 @@ function isColorLight(hex) {
 }
 
 export default function MoneyControl() {
-  // Pestaña inicial predeterminada: Historial de Entradas y Salidas
-  const [activeTab, setActiveTab] = useState('transactions');
+  const [activeTab, setActiveTab] = useState('transactions'); // 'transactions' | 'inventory'
+  const [inventorySubTab, setInventorySubTab] = useState('shirts'); // 'shirts' | 'mugs' | 'playmats'
+  const [txTypeFilter, setTxTypeFilter] = useState('all'); // 'all' (Neto) | 'income' | 'expense'
   const [loading, setLoading] = useState(true);
 
-  // Estados iniciales vacíos: SOLO leen de Supabase
+  // Estados de datos
   const [transactions, setTransactions] = useState([]);
-  const [inventory, setInventory] = useState([]);
+  const [inventory, setInventory] = useState([]); // Playeras
+  const [otherInventory, setOtherInventory] = useState([]); // Tazas y Playmats / Pads
 
   // Modales
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -57,12 +59,20 @@ export default function MoneyControl() {
   const [isAddShirtModalOpen, setIsAddShirtModalOpen] = useState(false);
   const [shirtToDelete, setShirtToDelete] = useState(null);
 
-  // Formulario nuevo color
+  // Modales de Tazas / Playmats
+  const [isAddOtherModalOpen, setIsAddOtherModalOpen] = useState(false);
+  const [newOtherCategory, setNewOtherCategory] = useState('Tazas');
+  const [newOtherName, setNewOtherName] = useState('');
+  const [newOtherSpec, setNewOtherSpec] = useState('');
+  const [newOtherHex, setNewOtherHex] = useState('#ffffff');
+  const [itemToDelete, setItemToDelete] = useState(null);
+
+  // Formulario nuevo color de playeras
   const [newShirtColorName, setNewShirtColorName] = useState('');
   const [newShirtHex, setNewShirtHex] = useState('#38bdf8');
   const [newShirtGender, setNewShirtGender] = useState('Hombre');
 
-  // Filtros de fecha
+  // Filtros de fecha / período
   const [filterMode, setFilterMode] = useState('quarter');
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
@@ -70,12 +80,9 @@ export default function MoneyControl() {
   const [selectedYear, setSelectedYear] = useState(currentYear);
   const [selectedQuarter, setSelectedQuarter] = useState(defaultQuarterId);
 
-  // Filtro de inventario
+  // Filtro género playeras
   const [inventoryGenderFilter, setInventoryGenderFilter] = useState('Todos');
 
-  // ==========================================
-  // CARGA EXCLUSIVA DESDE SUPABASE
-  // ==========================================
   useEffect(() => {
     fetchData();
   }, []);
@@ -83,29 +90,26 @@ export default function MoneyControl() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Obtener Transacciones reales de Supabase
+      // 1. Transacciones
       const { data: txData, error: txError } = await supabase
         .from('transactions')
         .select('*')
         .order('date', { ascending: false });
+      if (!txError) setTransactions(txData || []);
 
-      if (txError) {
-        console.error('Error cargando transacciones de Supabase:', txError);
-      } else {
-        setTransactions(txData || []);
-      }
-
-      // 2. Obtener Inventario real de Supabase
+      // 2. Inventario de Playeras
       const { data: invData, error: invError } = await supabase
         .from('shirt_inventory')
         .select('*')
         .order('created_at', { ascending: true });
+      if (!invError) setInventory(invData || []);
 
-      if (invError) {
-        console.error('Error cargando inventario de Supabase:', invError);
-      } else {
-        setInventory(invData || []);
-      }
+      // 3. Inventario de Tazas y Playmats (tabla nueva)
+      const { data: othersData, error: othersError } = await supabase
+        .from('other_inventory')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (!othersError) setOtherInventory(othersData || []);
     } catch (err) {
       console.error('Error al conectar con Supabase:', err);
     } finally {
@@ -113,15 +117,10 @@ export default function MoneyControl() {
     }
   };
 
-  // ==========================================
-  // OPERACIONES CRUD DIRECTAS EN SUPABASE
-  // ==========================================
-
-  // 1. Guardar nueva transacción y procesar stock si aplica
+  // Guardar transacción
   const handleSaveTransaction = async (newTx) => {
     setTransactions((prev) => [newTx, ...prev]);
 
-    // Si la venta incluye deducciones automáticas de playeras
     if (newTx.inventoryDeductions && newTx.inventoryDeductions.length > 0) {
       for (const item of newTx.inventoryDeductions) {
         const colName = `size_${item.size.toLowerCase()}`;
@@ -135,31 +134,23 @@ export default function MoneyControl() {
           const currentQty = card[colName] || 0;
           const newQty = Math.max(0, currentQty - item.quantity);
 
-          // Actualizar estado local
           setInventory((prev) =>
             prev.map((c) => (c.id === card.id ? { ...c, [colName]: newQty } : c))
           );
 
-          // Actualizar stock en Supabase
-          const { error: invErr } = await supabase
+          await supabase
             .from('shirt_inventory')
             .update({ [colName]: newQty })
             .eq('id', card.id);
-
-          if (invErr) {
-            console.error('Error reduciendo stock en Supabase:', invErr);
-          }
         }
       }
     }
 
-    // Guardar metadata en 'details' para poder devolver el inventario si se elimina
     const storedDetails =
       newTx.inventoryDeductions && newTx.inventoryDeductions.length > 0
         ? `${newTx.details || ''} __DEDUCTIONS__:${JSON.stringify(newTx.inventoryDeductions)}`
         : newTx.details || '';
 
-    // Insertar registro financiero en Supabase
     const { error } = await supabase.from('transactions').insert([
       {
         id: newTx.id,
@@ -174,30 +165,18 @@ export default function MoneyControl() {
 
     if (error) {
       console.error('Error insertando en Supabase:', error);
-      alert('Error en Supabase: ' + error.message);
       fetchData();
     }
   };
 
-  // 2. Actualizar fecha en Supabase
   const handleDateChange = async (id, newDate) => {
     if (!newDate) return;
     setTransactions((prev) =>
       prev.map((t) => (t.id === id ? { ...t, date: newDate } : t))
     );
-
-    const { error } = await supabase
-      .from('transactions')
-      .update({ date: newDate })
-      .eq('id', id);
-
-    if (error) {
-      console.error('Error actualizando fecha:', error);
-      fetchData();
-    }
+    await supabase.from('transactions').update({ date: newDate }).eq('id', id);
   };
 
-  // 3. Eliminar transacción de Supabase y devolver stock
   const promptDeleteTx = (tx) => setTxToDelete(tx);
   const cancelDeleteTx = () => setTxToDelete(null);
 
@@ -205,7 +184,6 @@ export default function MoneyControl() {
     if (!txToDelete) return;
     const targetId = txToDelete.id;
 
-    // Detectar si la transacción eliminada descontó stock
     let deductionsToRestore = [];
     if (txToDelete.inventoryDeductions && txToDelete.inventoryDeductions.length > 0) {
       deductionsToRestore = txToDelete.inventoryDeductions;
@@ -214,11 +192,10 @@ export default function MoneyControl() {
         const parts = txToDelete.details.split('__DEDUCTIONS__:');
         deductionsToRestore = JSON.parse(parts[1]);
       } catch (err) {
-        console.error('Error interpretando deducciones previas:', err);
+        console.error('Error deducciones:', err);
       }
     }
 
-    // Regresar las playeras al almacén en Supabase y localmente
     if (deductionsToRestore.length > 0) {
       for (const item of deductionsToRestore) {
         const colName = `size_${item.size.toLowerCase()}`;
@@ -232,41 +209,24 @@ export default function MoneyControl() {
           const currentQty = card[colName] || 0;
           const restoredQty = currentQty + Number(item.quantity);
 
-          // Actualizar estado local
           setInventory((prev) =>
             prev.map((c) => (c.id === card.id ? { ...c, [colName]: restoredQty } : c))
           );
 
-          // Actualizar en Supabase
-          const { error: invErr } = await supabase
+          await supabase
             .from('shirt_inventory')
             .update({ [colName]: restoredQty })
             .eq('id', card.id);
-
-          if (invErr) {
-            console.error('Error devolviendo stock a Supabase:', invErr);
-          }
         }
       }
     }
 
-    // Eliminar transacción local y en Supabase
     setTransactions((prev) => prev.filter((t) => t.id !== targetId));
     setTxToDelete(null);
-
-    const { error } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('id', targetId);
-
-    if (error) {
-      console.error('Error eliminando en Supabase:', error);
-      alert('Error al borrar en Supabase: ' + error.message);
-      fetchData();
-    }
+    await supabase.from('transactions').delete().eq('id', targetId);
   };
 
-  // 4. Cambiar stock en Supabase (+ / -)
+  // Stock Playeras (+ / -)
   const handleStockChange = async (cardId, size, delta) => {
     const colName = `size_${size.toLowerCase()}`;
     const targetItem = inventory.find((i) => i.id === cardId);
@@ -281,25 +241,36 @@ export default function MoneyControl() {
       )
     );
 
-    const { error } = await supabase
+    await supabase
       .from('shirt_inventory')
       .update({ [colName]: newQty })
       .eq('id', cardId);
-
-    if (error) {
-      console.error('Error actualizando stock en Supabase:', error);
-      fetchData();
-    }
   };
 
-  // 5. Crear nueva tarjeta directamente en Supabase
+  // Stock Tazas y Playmats (+ / -)
+  const handleOtherStockChange = async (itemId, delta) => {
+    const targetItem = otherInventory.find((i) => i.id === itemId);
+    if (!targetItem) return;
+
+    const newQty = Math.max(0, (targetItem.quantity || 0) + delta);
+
+    setOtherInventory((prev) =>
+      prev.map((item) => (item.id === itemId ? { ...item, quantity: newQty } : item))
+    );
+
+    await supabase
+      .from('other_inventory')
+      .update({ quantity: newQty })
+      .eq('id', itemId);
+  };
+
+  // Crear Playera
   const handleCreateShirtSubmit = async (e) => {
     e.preventDefault();
     const trimmedName = newShirtColorName.trim();
     if (!trimmedName) return;
 
     const generatedId = `${trimmedName}_${newShirtGender}`.replace(/\s+/g, '_');
-
     if (inventory.some((i) => i.id === generatedId)) {
       alert(`Ya existe una tarjeta para ${trimmedName} (${newShirtGender}).`);
       return;
@@ -321,15 +292,45 @@ export default function MoneyControl() {
     setNewShirtColorName('');
     setNewShirtHex('#38bdf8');
 
-    const { error } = await supabase.from('shirt_inventory').insert([newCard]);
-    if (error) {
-      console.error('Error insertando color en Supabase:', error);
-      alert('Error al guardar en Supabase: ' + error.message);
-      fetchData();
-    }
+    await supabase.from('shirt_inventory').insert([newCard]);
   };
 
-  // 6. Eliminar tarjeta de Supabase
+  // Crear Taza o Playmat
+  const handleCreateOtherSubmit = async (e) => {
+    e.preventDefault();
+    const trimmedName = newOtherName.trim();
+    if (!trimmedName) return;
+
+    const generatedId = `${newOtherCategory}_${trimmedName}_${Date.now()}`.replace(/\s+/g, '_');
+    const newItem = {
+      id: generatedId,
+      category: newOtherCategory,
+      name: trimmedName,
+      spec: newOtherSpec.trim() || (newOtherCategory === 'Tazas' ? '11oz' : '60x35cm'),
+      hex: newOtherHex,
+      quantity: 0,
+    };
+
+    setOtherInventory((prev) => [newItem, ...prev]);
+    setIsAddOtherModalOpen(false);
+    setNewOtherName('');
+    setNewOtherSpec('');
+
+    await supabase.from('other_inventory').insert([newItem]);
+  };
+
+  // Eliminar Taza o Playmat
+  const confirmDeleteOtherItem = async () => {
+    if (!itemToDelete) return;
+    const targetId = itemToDelete.id;
+
+    setOtherInventory((prev) => prev.filter((i) => i.id !== targetId));
+    setItemToDelete(null);
+
+    await supabase.from('other_inventory').delete().eq('id', targetId);
+  };
+
+  // Eliminar Playera
   const promptDeleteShirt = (item) => setShirtToDelete(item);
   const cancelDeleteShirt = () => setShirtToDelete(null);
   const confirmDeleteShirt = async () => {
@@ -339,21 +340,10 @@ export default function MoneyControl() {
     setInventory((prev) => prev.filter((i) => i.id !== targetId));
     setShirtToDelete(null);
 
-    const { error } = await supabase
-      .from('shirt_inventory')
-      .delete()
-      .eq('id', targetId);
-
-    if (error) {
-      console.error('Error borrando en Supabase:', error);
-      alert('Error al eliminar en Supabase: ' + error.message);
-      fetchData();
-    }
+    await supabase.from('shirt_inventory').delete().eq('id', targetId);
   };
 
-  // ==========================================
-  // CÁLCULOS
-  // ==========================================
+  // Cálculos de stocks
   const getCardTotalUnits = (card) => {
     return (
       (Number(card.size_s) || 0) +
@@ -364,10 +354,22 @@ export default function MoneyControl() {
   };
 
   const totalShirtsStock = useMemo(() => {
-    return inventory.reduce((totalAcc, card) => {
-      return totalAcc + getCardTotalUnits(card);
-    }, 0);
+    return inventory.reduce((acc, card) => acc + getCardTotalUnits(card), 0);
   }, [inventory]);
+
+  const totalMugsStock = useMemo(() => {
+    return otherInventory
+      .filter((i) => i.category === 'Tazas')
+      .reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0);
+  }, [otherInventory]);
+
+  const totalPlaymatsStock = useMemo(() => {
+    return otherInventory
+      .filter((i) => i.category === 'Playmats')
+      .reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0);
+  }, [otherInventory]);
+
+  const totalGlobalStock = totalShirtsStock + totalMugsStock + totalPlaymatsStock;
 
   const availableYears = useMemo(() => {
     const yearsSet = new Set([currentYear, currentYear - 1, currentYear + 1]);
@@ -380,7 +382,8 @@ export default function MoneyControl() {
     return Array.from(yearsSet).sort((a, b) => b - a);
   }, [transactions, currentYear]);
 
-  const filteredTransactions = useMemo(() => {
+  // Transacciones acotadas por período
+  const periodTransactions = useMemo(() => {
     return transactions.filter((tx) => {
       if (filterMode === 'total') return true;
       if (!tx.date) return false;
@@ -407,13 +410,23 @@ export default function MoneyControl() {
   const filteredMetrics = useMemo(() => {
     let s = 0;
     let e = 0;
-    filteredTransactions.forEach((tx) => {
+    periodTransactions.forEach((tx) => {
       const amt = Number(tx.amount) || 0;
       if (tx.type === 'income') s += amt;
       if (tx.type === 'expense') e += amt;
     });
     return { sales: s, expenses: e, total: s - e };
-  }, [filteredTransactions]);
+  }, [periodTransactions]);
+
+  const tableTransactions = useMemo(() => {
+    if (txTypeFilter === 'income') {
+      return periodTransactions.filter((tx) => tx.type === 'income');
+    }
+    if (txTypeFilter === 'expense') {
+      return periodTransactions.filter((tx) => tx.type === 'expense');
+    }
+    return periodTransactions;
+  }, [periodTransactions, txTypeFilter]);
 
   const filteredInventory = useMemo(() => {
     return inventory.filter((item) => {
@@ -445,9 +458,13 @@ export default function MoneyControl() {
     return match ? match.hex : '#38bdf8';
   };
 
+  const handleMetricCardClick = (type) => {
+    setActiveTab('transactions');
+    setTxTypeFilter(type);
+  };
+
   return (
     <div className="money-page">
-      {/* HEADER SUPERIOR FIJO */}
       <header
         className="money-nav"
         style={{
@@ -458,7 +475,6 @@ export default function MoneyControl() {
           gap: '0.6rem',
         }}
       >
-        {/* CONTENEDOR CENTRAL ALINEADO */}
         <div
           style={{
             width: '100%',
@@ -469,7 +485,6 @@ export default function MoneyControl() {
             gap: '0.6rem',
           }}
         >
-          {/* TÍTULO Y CONTROLES DE PERIODO */}
           <div
             style={{
               display: 'flex',
@@ -480,10 +495,10 @@ export default function MoneyControl() {
           >
             <div className="nav-title-group" style={{ margin: 0 }}>
               <span className="brand-badge">SAD KOALA</span>
-              <h1 className="brand-title">Control Financiero</h1>
+              <h1 className="brand-title">Control Financiero & Almacén</h1>
             </div>
 
-            {/* SELECTOR DE PERIODO ADAPTABLE */}
+            {/* SELECTOR DE PERÍODO */}
             <div
               style={{
                 width: '100%',
@@ -492,7 +507,6 @@ export default function MoneyControl() {
                 gap: '0.4rem',
               }}
             >
-              {/* FILA 1: BOTONES TRIMESTRE / AÑO / TOTAL */}
               <div
                 style={{
                   display: 'flex',
@@ -507,13 +521,7 @@ export default function MoneyControl() {
                 <button
                   type="button"
                   className={`btn-period ${filterMode === 'quarter' ? 'active' : ''}`}
-                  style={{
-                    flex: 1,
-                    padding: '0.55rem 0.2rem',
-                    textAlign: 'center',
-                    justifyContent: 'center',
-                    margin: 0,
-                  }}
+                  style={{ flex: 1, padding: '0.55rem 0.2rem', textAlign: 'center', justifyContent: 'center', margin: 0 }}
                   onClick={() => setFilterMode('quarter')}
                 >
                   Trimestre
@@ -521,13 +529,7 @@ export default function MoneyControl() {
                 <button
                   type="button"
                   className={`btn-period ${filterMode === 'year' ? 'active' : ''}`}
-                  style={{
-                    flex: 1,
-                    padding: '0.55rem 0.2rem',
-                    textAlign: 'center',
-                    justifyContent: 'center',
-                    margin: 0,
-                  }}
+                  style={{ flex: 1, padding: '0.55rem 0.2rem', textAlign: 'center', justifyContent: 'center', margin: 0 }}
                   onClick={() => setFilterMode('year')}
                 >
                   Año
@@ -535,64 +537,33 @@ export default function MoneyControl() {
                 <button
                   type="button"
                   className={`btn-period ${filterMode === 'total' ? 'active' : ''}`}
-                  style={{
-                    flex: 1,
-                    padding: '0.55rem 0.2rem',
-                    textAlign: 'center',
-                    justifyContent: 'center',
-                    margin: 0,
-                  }}
+                  style={{ flex: 1, padding: '0.55rem 0.2rem', textAlign: 'center', justifyContent: 'center', margin: 0 }}
                   onClick={() => setFilterMode('total')}
                 >
                   Total
                 </button>
               </div>
 
-              {/* FILA 2: SELECTORES DINÁMICOS */}
               {filterMode === 'quarter' && (
                 <div style={{ display: 'flex', width: '100%', gap: '0.4rem' }}>
                   <select
                     className="period-sub-select"
-                    style={{
-                      flex: 2,
-                      minWidth: 0,
-                      padding: '0.55rem 0.6rem',
-                      background: '#0c1527',
-                      color: '#38bdf8',
-                      border: '1px solid rgba(56, 189, 248, 0.3)',
-                      borderRadius: '8px',
-                      fontSize: '0.9rem',
-                      fontWeight: 600,
-                    }}
+                    style={{ flex: 2, minWidth: 0, padding: '0.55rem 0.6rem', background: '#0c1527', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600 }}
                     value={selectedQuarter}
                     onChange={(e) => setSelectedQuarter(e.target.value)}
                   >
                     {QUARTERS.map((q) => (
-                      <option key={q.id} value={q.id}>
-                        {q.name}
-                      </option>
+                      <option key={q.id} value={q.id}>{q.name}</option>
                     ))}
                   </select>
                   <select
                     className="period-sub-select"
-                    style={{
-                      flex: 1,
-                      minWidth: 0,
-                      padding: '0.55rem 0.6rem',
-                      background: '#0c1527',
-                      color: '#38bdf8',
-                      border: '1px solid rgba(56, 189, 248, 0.3)',
-                      borderRadius: '8px',
-                      fontSize: '0.9rem',
-                      fontWeight: 600,
-                    }}
+                    style={{ flex: 1, minWidth: 0, padding: '0.55rem 0.6rem', background: '#0c1527', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600 }}
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(Number(e.target.value))}
                   >
                     {availableYears.map((yr) => (
-                      <option key={yr} value={yr}>
-                        {yr}
-                      </option>
+                      <option key={yr} value={yr}>{yr}</option>
                     ))}
                   </select>
                 </div>
@@ -602,29 +573,18 @@ export default function MoneyControl() {
                 <div style={{ display: 'flex', width: '100%' }}>
                   <select
                     className="period-sub-select"
-                    style={{
-                      width: '100%',
-                      padding: '0.55rem 0.6rem',
-                      background: '#0c1527',
-                      color: '#38bdf8',
-                      border: '1px solid rgba(56, 189, 248, 0.3)',
-                      borderRadius: '8px',
-                      fontSize: '0.9rem',
-                      fontWeight: 600,
-                    }}
+                    style={{ width: '100%', padding: '0.55rem 0.6rem', background: '#0c1527', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 600 }}
                     value={selectedYear}
                     onChange={(e) => setSelectedYear(Number(e.target.value))}
                   >
                     {availableYears.map((yr) => (
-                      <option key={yr} value={yr}>
-                        {yr}
-                      </option>
+                      <option key={yr} value={yr}>{yr}</option>
                     ))}
                   </select>
                 </div>
               )}
 
-              {/* CAJAS DE MÉTRICAS */}
+              {/* BOTONES INTERACTIVOS: VENTAS, GASTOS, NETO Y ALMACÉN STOCK */}
               <nav
                 className="nav-metrics-container"
                 style={{
@@ -637,190 +597,188 @@ export default function MoneyControl() {
               >
                 <div
                   className={`metric-box box-sales metric-nav-btn ${
-                    activeTab === 'transactions' ? 'active-nav-card' : ''
+                    activeTab === 'transactions' && txTypeFilter === 'income' ? 'active-nav-card' : ''
                   }`}
-                  onClick={() => setActiveTab('transactions')}
-                  title="Ver Historial de Movimientos"
+                  onClick={() => handleMetricCardClick('income')}
+                  title="Ver sólo Ventas"
+                  style={{ cursor: 'pointer' }}
                 >
                   <span className="metric-lbl">
-                    Ventas (
-                    {filterMode === 'total'
-                      ? 'Total'
-                      : filterMode === 'year'
-                      ? selectedYear
-                      : selectedQuarter}
-                    )
+                    Ventas ({filterMode === 'total' ? 'Total' : filterMode === 'year' ? selectedYear : selectedQuarter})
                   </span>
-                  <span className="metric-val">
-                    {formatMoney(filteredMetrics.sales)}
-                  </span>
+                  <span className="metric-val">{formatMoney(filteredMetrics.sales)}</span>
                 </div>
 
                 <div
                   className={`metric-box box-expenses metric-nav-btn ${
-                    activeTab === 'transactions' ? 'active-nav-card' : ''
+                    activeTab === 'transactions' && txTypeFilter === 'expense' ? 'active-nav-card' : ''
                   }`}
-                  onClick={() => setActiveTab('transactions')}
-                  title="Ver Historial de Movimientos"
+                  onClick={() => handleMetricCardClick('expense')}
+                  title="Ver sólo Gastos"
+                  style={{ cursor: 'pointer' }}
                 >
                   <span className="metric-lbl">
-                    Gastos (
-                    {filterMode === 'total'
-                      ? 'Total'
-                      : filterMode === 'year'
-                      ? selectedYear
-                      : selectedQuarter}
-                    )
+                    Gastos ({filterMode === 'total' ? 'Total' : filterMode === 'year' ? selectedYear : selectedQuarter})
                   </span>
-                  <span className="metric-val">
-                    {formatMoney(filteredMetrics.expenses)}
-                  </span>
+                  <span className="metric-val">{formatMoney(filteredMetrics.expenses)}</span>
                 </div>
 
-                {/* NETO */}
                 <div
                   className={`metric-box metric-nav-btn ${
                     filteredMetrics.total >= 0 ? 'box-total-pos' : 'box-total-neg'
-                  } ${activeTab === 'transactions' ? 'active-nav-card' : ''}`}
-                  onClick={() => setActiveTab('transactions')}
-                  title="Clic para ver Historial de Movimientos"
+                  } ${activeTab === 'transactions' && txTypeFilter === 'all' ? 'active-nav-card' : ''}`}
+                  onClick={() => handleMetricCardClick('all')}
+                  title="Ver Neto (Ventas y Gastos)"
+                  style={{ cursor: 'pointer' }}
                 >
                   <span className="metric-lbl">
-                    Neto (
-                    {filterMode === 'total'
-                      ? 'Total'
-                      : filterMode === 'year'
-                      ? selectedYear
-                      : selectedQuarter}
-                    )
+                    Neto ({filterMode === 'total' ? 'Total' : filterMode === 'year' ? selectedYear : selectedQuarter})
                   </span>
-                  <span className="metric-val">
-                    {formatMoney(filteredMetrics.total)}
-                  </span>
+                  <span className="metric-val">{formatMoney(filteredMetrics.total)}</span>
                 </div>
 
-                {/* PLAYERAS STOCK */}
+                {/* BOTÓN ALMACÉN GENERAL */}
                 <div
                   className={`metric-box box-shirts-total metric-nav-btn ${
                     activeTab === 'inventory' ? 'active-nav-card' : ''
                   }`}
                   onClick={() => setActiveTab('inventory')}
-                  title="Clic para ver Almacén de Playeras"
+                  title="Abrir Almacén de Stock"
+                  style={{ cursor: 'pointer' }}
                 >
-                  <span className="metric-lbl">Playeras Stock</span>
+                  <span className="metric-lbl">Almacén Stock</span>
                   <span className="metric-val metric-val-shirts">
-                    {totalShirtsStock} <span className="metric-unit">pzas</span>
+                    {totalGlobalStock} <span className="metric-unit">pzas</span>
                   </span>
                 </div>
               </nav>
             </div>
           </div>
 
-          {/* FILA DE CONTROLES INVENTARIO (SOLO EN PESTAÑA INVENTARIO) */}
+          {/* ========================================================
+              SUBMENÚ DE ALMACÉN: PLAYERAS | TAZAS | PLAYMATS
+             ======================================================== */}
           {activeTab === 'inventory' && (
             <div
               style={{
                 width: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '0.4rem',
-                touchAction: 'none',
-                userSelect: 'none',
-                WebkitUserSelect: 'none',
+                gap: '0.5rem',
+                marginTop: '0.4rem',
               }}
             >
-              <button
-                type="button"
-                className="btn-add-shirt-card"
-                style={{
-                  width: '100%',
-                  padding: '0.7rem 1.25rem',
-                  fontSize: '0.95rem',
-                  margin: 0,
-                  touchAction: 'manipulation',
-                }}
-                onClick={() => setIsAddShirtModalOpen(true)}
-              >
-                + Crear Nuevo Color
-              </button>
-
+              {/* SUBPESTAÑAS */}
               <div
-                className="inventory-controls-bar"
                 style={{
-                  margin: 0,
-                  padding: 0,
-                  width: '100%',
-                  touchAction: 'none',
+                  display: 'flex',
+                  gap: '0.35rem',
+                  background: 'rgba(11, 23, 42, 0.9)',
+                  padding: '4px',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(56, 189, 248, 0.25)',
                 }}
               >
-                <div
-                  className="gender-toggle-group"
-                  style={{
-                    margin: 0,
-                    width: '100%',
-                    display: 'flex',
-                    gap: '0.5rem',
+                <button
+                  type="button"
+                  className={`btn-period ${inventorySubTab === 'shirts' ? 'active' : ''}`}
+                  style={{ flex: 1, padding: '0.55rem 0.2rem', textAlign: 'center', fontWeight: 700 }}
+                  onClick={() => setInventorySubTab('shirts')}
+                >
+                  👕 Playeras ({totalShirtsStock})
+                </button>
+                <button
+                  type="button"
+                  className={`btn-period ${inventorySubTab === 'mugs' ? 'active' : ''}`}
+                  style={{ flex: 1, padding: '0.55rem 0.2rem', textAlign: 'center', fontWeight: 700 }}
+                  onClick={() => setInventorySubTab('mugs')}
+                >
+                  ☕ Tazas ({totalMugsStock})
+                </button>
+                <button
+                  type="button"
+                  className={`btn-period ${inventorySubTab === 'playmats' ? 'active' : ''}`}
+                  style={{ flex: 1, padding: '0.55rem 0.2rem', textAlign: 'center', fontWeight: 700 }}
+                  onClick={() => setInventorySubTab('playmats')}
+                >
+                  🖱️ Playmats / Pads ({totalPlaymatsStock})
+                </button>
+              </div>
+
+              {/* BOTONES ESPECÍFICOS SEGÚN SUBPESTAÑA */}
+              {inventorySubTab === 'shirts' && (
+                <>
+                  <button
+                    type="button"
+                    className="btn-add-shirt-card"
+                    style={{ width: '100%', padding: '0.65rem 1.25rem', fontSize: '0.92rem', margin: 0 }}
+                    onClick={() => setIsAddShirtModalOpen(true)}
+                  >
+                    + Crear Nuevo Color de Playera
+                  </button>
+
+                  <div className="gender-toggle-group" style={{ margin: 0, width: '100%', display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className={`btn-gender-filter ${inventoryGenderFilter === 'Todos' ? 'active' : ''}`}
+                      style={{ flex: 1, padding: '0.6rem 0.5rem', fontSize: '0.9rem' }}
+                      onClick={() => setInventoryGenderFilter('Todos')}
+                    >
+                      👥 Todos
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-gender-filter btn-gender-male ${inventoryGenderFilter === 'Hombre' ? 'active' : ''}`}
+                      style={{ flex: 1, padding: '0.6rem 0.5rem', fontSize: '0.9rem' }}
+                      onClick={() => setInventoryGenderFilter('Hombre')}
+                    >
+                      ♂ Hombre
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn-gender-filter btn-gender-female ${inventoryGenderFilter === 'Mujer' ? 'active' : ''}`}
+                      style={{ flex: 1, padding: '0.6rem 0.5rem', fontSize: '0.9rem' }}
+                      onClick={() => setInventoryGenderFilter('Mujer')}
+                    >
+                      ♀ Mujer
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {inventorySubTab === 'mugs' && (
+                <button
+                  type="button"
+                  className="btn-add-shirt-card"
+                  style={{ width: '100%', padding: '0.65rem 1.25rem', fontSize: '0.92rem', margin: 0 }}
+                  onClick={() => {
+                    setNewOtherCategory('Tazas');
+                    setNewOtherName('');
+                    setNewOtherSpec('11oz cerámica');
+                    setNewOtherHex('#ffffff');
+                    setIsAddOtherModalOpen(true);
                   }}
                 >
-                  <button
-                    type="button"
-                    className={`btn-gender-filter ${
-                      inventoryGenderFilter === 'Todos' ? 'active' : ''
-                    }`}
-                    style={{
-                      flex: 1,
-                      padding: '0.65rem 0.5rem',
-                      fontSize: '0.95rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      touchAction: 'manipulation',
-                    }}
-                    onClick={() => setInventoryGenderFilter('Todos')}
-                    title="Mostrar todos los géneros"
-                  >
-                    👥 Todos
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn-gender-filter btn-gender-male ${
-                      inventoryGenderFilter === 'Hombre' ? 'active' : ''
-                    }`}
-                    style={{
-                      flex: 1,
-                      padding: '0.65rem 0.5rem',
-                      fontSize: '0.95rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      touchAction: 'manipulation',
-                    }}
-                    onClick={() => setInventoryGenderFilter('Hombre')}
-                    title="Solo playeras de Hombre"
-                  >
-                    <span className="gender-symbol" style={{ marginRight: '0.25rem' }}>♂</span> Hombre
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn-gender-filter btn-gender-female ${
-                      inventoryGenderFilter === 'Mujer' ? 'active' : ''
-                    }`}
-                    style={{
-                      flex: 1,
-                      padding: '0.65rem 0.5rem',
-                      fontSize: '0.95rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      touchAction: 'manipulation',
-                    }}
-                    onClick={() => setInventoryGenderFilter('Mujer')}
-                    title="Solo playeras de Mujer"
-                  >
-                    <span className="gender-symbol" style={{ marginRight: '0.25rem' }}>♀</span> Mujer
-                  </button>
-                </div>
-              </div>
+                  + Agregar Color / Modelo de Taza
+                </button>
+              )}
+
+              {inventorySubTab === 'playmats' && (
+                <button
+                  type="button"
+                  className="btn-add-shirt-card"
+                  style={{ width: '100%', padding: '0.65rem 1.25rem', fontSize: '0.92rem', margin: 0 }}
+                  onClick={() => {
+                    setNewOtherCategory('Playmats');
+                    setNewOtherName('');
+                    setNewOtherSpec('60x35cm TCG');
+                    setNewOtherHex('#1e293b');
+                    setIsAddOtherModalOpen(true);
+                  }}
+                >
+                  + Agregar Tamaño / Medida de Playmat o Mousepad
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -839,10 +797,11 @@ export default function MoneyControl() {
               <>
                 <div className="table-top-bar">
                   <h2 className="section-title">
-                    Historial de Movimientos{' '}
-                    <span className="period-subtitle">
-                      ({getPeriodLabel()})
-                    </span>
+                    Historial:{' '}
+                    <span style={{ color: txTypeFilter === 'income' ? '#38bdf8' : txTypeFilter === 'expense' ? '#f87171' : '#4ade80' }}>
+                      {txTypeFilter === 'income' ? 'Solo Ventas' : txTypeFilter === 'expense' ? 'Solo Gastos' : 'Entradas y Salidas (Neto)'}
+                    </span>{' '}
+                    <span className="period-subtitle">({getPeriodLabel()})</span>
                   </h2>
                   <button
                     type="button"
@@ -855,48 +814,34 @@ export default function MoneyControl() {
 
                 <div className="block-table-container">
                   <div className="block-row block-header-row">
-                    <div className="block-cell header-cell cell-date-header">
-                      Fecha
-                    </div>
+                    <div className="block-cell header-cell cell-date-header">Fecha</div>
                     <div className="block-cell header-cell">Tipo</div>
                     <div className="block-cell header-cell">Categoría</div>
-                    <div className="block-cell header-cell cell-desc">
-                      Detalle & Desglose
-                    </div>
+                    <div className="block-cell header-cell cell-desc">Detalle & Desglose</div>
                     <div className="block-cell header-cell">Monto</div>
-                    <div className="block-cell header-cell cell-action">
-                      Acción
-                    </div>
+                    <div className="block-cell header-cell cell-action">Acción</div>
                   </div>
 
-                  {filteredTransactions.length === 0 ? (
+                  {tableTransactions.length === 0 ? (
                     <div className="empty-box">
-                      No hay movimientos registrados en Supabase para{' '}
+                      No hay {txTypeFilter === 'income' ? 'ventas' : txTypeFilter === 'expense' ? 'gastos' : 'movimientos'} registrados en Supabase para{' '}
                       <strong>{getPeriodLabel()}</strong>.
                     </div>
                   ) : (
-                    filteredTransactions.map((tx) => (
+                    tableTransactions.map((tx) => (
                       <div key={tx.id} className="block-row data-row">
                         <div className="block-cell cell-date">
                           <input
                             type="date"
                             className="table-date-input"
                             value={tx.date}
-                            onChange={(e) =>
-                              handleDateChange(tx.id, e.target.value)
-                            }
+                            onChange={(e) => handleDateChange(tx.id, e.target.value)}
                             title="Haz clic para modificar la fecha"
                           />
                         </div>
 
                         <div className="block-cell">
-                          <span
-                            className={`badge-pill ${
-                              tx.type === 'income'
-                                ? 'pill-income'
-                                : 'pill-expense'
-                            }`}
-                          >
+                          <span className={`badge-pill ${tx.type === 'income' ? 'pill-income' : 'pill-expense'}`}>
                             {tx.type === 'income' ? 'VENTA' : 'GASTO'}
                           </span>
                         </div>
@@ -904,9 +849,7 @@ export default function MoneyControl() {
                         <div className="block-cell cell-cat">{tx.category}</div>
 
                         <div className="block-cell cell-desc">
-                          <span className="desc-main-text">
-                            {tx.description}
-                          </span>
+                          <span className="desc-main-text">{tx.description}</span>
                           {tx.details && (
                             <span className="desc-sub-text">
                               {tx.details.split('__DEDUCTIONS__:')[0]}
@@ -914,14 +857,8 @@ export default function MoneyControl() {
                           )}
                         </div>
 
-                        <div
-                          className={`block-cell cell-amount ${
-                            tx.type === 'income' ? 'txt-income' : 'txt-expense'
-                          }`}
-                        >
-                          {tx.type === 'income'
-                            ? `+${formatMoney(tx.amount)}`
-                            : `-${formatMoney(tx.amount)}`}
+                        <div className={`block-cell cell-amount ${tx.type === 'income' ? 'txt-income' : 'txt-expense'}`}>
+                          {tx.type === 'income' ? `+${formatMoney(tx.amount)}` : `-${formatMoney(tx.amount)}`}
                         </div>
 
                         <div className="block-cell cell-action">
@@ -940,98 +877,218 @@ export default function MoneyControl() {
               </>
             )}
 
-            {/* VISTA 2: ALMACÉN DE PLAYERAS */}
+            {/* VISTA 2: ALMACÉN COMPLETO */}
             {activeTab === 'inventory' && (
               <section className="inventory-section" style={{ width: '100%', margin: 0, padding: 0 }}>
-                {filteredInventory.length === 0 ? (
-                  <div className="empty-box">
-                    No hay playeras registradas en tu tabla <code>shirt_inventory</code> de Supabase.
-                  </div>
-                ) : (
-                  <div className="inventory-matrix-grid" style={{ width: '100%' }}>
-                    {filteredInventory.map((item) => {
-                      const hexColor = getColorHex(item);
-                      const isLight = isColorLight(hexColor);
-                      const cardTotal = getCardTotalUnits(item);
+                {/* 2.1 PLAYERAS */}
+                {inventorySubTab === 'shirts' && (
+                  filteredInventory.length === 0 ? (
+                    <div className="empty-box">
+                      No hay playeras registradas en <code>shirt_inventory</code>.
+                    </div>
+                  ) : (
+                    <div className="inventory-matrix-grid" style={{ width: '100%' }}>
+                      {filteredInventory.map((item) => {
+                        const hexColor = getColorHex(item);
+                        const isLight = isColorLight(hexColor);
+                        const cardTotal = getCardTotalUnits(item);
 
-                      return (
-                        <div
-                          key={item.id}
-                          className={`inventory-matrix-card shirt-colored-card ${
-                            isLight ? 'card-theme-light' : 'card-theme-dark'
-                          }`}
-                          style={{ '--card-shirt-color': hexColor }}
-                        >
-                          <div className="inv-matrix-header">
-                            <div className="inv-matrix-title-wrap">
-                              <span
-                                className="inv-color-title"
-                                title={item.color}
-                              >
-                                {item.color}
-                              </span>
-                              <span className="inv-tag">
-                                {item.gender === 'Hombre' && '♂ '}
-                                {item.gender === 'Mujer' && '♀ '}
-                                {item.gender}
-                              </span>
+                        return (
+                          <div
+                            key={item.id}
+                            className={`inventory-matrix-card shirt-colored-card ${isLight ? 'card-theme-light' : 'card-theme-dark'}`}
+                            style={{ '--card-shirt-color': hexColor }}
+                          >
+                            <div className="inv-matrix-header">
+                              <div className="inv-matrix-title-wrap">
+                                <span className="inv-color-title" title={item.color}>{item.color}</span>
+                                <span className="inv-tag">
+                                  {item.gender === 'Hombre' && '♂ '}
+                                  {item.gender === 'Mujer' && '♀ '}
+                                  {item.gender}
+                                </span>
+                              </div>
+                              <div className="inv-matrix-header-right">
+                                <span className="inv-card-total-pill">
+                                  Total: <strong>{cardTotal}</strong> pzas
+                                </span>
+                                <button
+                                  type="button"
+                                  className="btn-remove-shirt-card"
+                                  onClick={() => promptDeleteShirt(item)}
+                                  title="Eliminar este color"
+                                >
+                                  ✕
+                                </button>
+                              </div>
                             </div>
 
-                            <div className="inv-matrix-header-right">
-                              <span className="inv-card-total-pill">
-                                Total: <strong>{cardTotal}</strong> pzas
-                              </span>
+                            <div className="inv-sizes-matrix">
+                              {SIZES.map((size) => {
+                                const colKey = `size_${size.toLowerCase()}`;
+                                const qty = item[colKey] || 0;
+                                return (
+                                  <div key={size} className="size-row-pill">
+                                    <span className="size-label">{size}</span>
+                                    <span className="size-qty-num">{qty}</span>
+                                    <div className="size-btn-group">
+                                      <button
+                                        type="button"
+                                        className="btn-mini-qty"
+                                        onClick={() => handleStockChange(item.id, size, -1)}
+                                        disabled={qty === 0}
+                                      >
+                                        -
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn-mini-qty"
+                                        onClick={() => handleStockChange(item.id, size, 1)}
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+
+                {/* 2.2 TAZAS */}
+                {inventorySubTab === 'mugs' && (
+                  otherInventory.filter((i) => i.category === 'Tazas').length === 0 ? (
+                    <div className="empty-box">
+                      No hay modelos de tazas guardados todavía. Haz clic arriba en <strong>"+ Agregar Color / Modelo de Taza"</strong>.
+                    </div>
+                  ) : (
+                    <div className="inventory-matrix-grid" style={{ width: '100%' }}>
+                      {otherInventory.filter((i) => i.category === 'Tazas').map((item) => {
+                        const isLight = isColorLight(item.hex || '#ffffff');
+                        return (
+                          <div
+                            key={item.id}
+                            className={`inventory-matrix-card shirt-colored-card ${isLight ? 'card-theme-light' : 'card-theme-dark'}`}
+                            style={{ '--card-shirt-color': item.hex || '#ffffff' }}
+                          >
+                            <div className="inv-matrix-header">
+                              <div className="inv-matrix-title-wrap">
+                                <span className="inv-color-title">{item.name}</span>
+                                <span className="inv-tag">{item.spec || '11oz'}</span>
+                              </div>
                               <button
                                 type="button"
                                 className="btn-remove-shirt-card"
-                                onClick={() => promptDeleteShirt(item)}
-                                title="Eliminar este color/corte"
+                                onClick={() => setItemToDelete(item)}
+                                title="Eliminar taza"
                               >
                                 ✕
                               </button>
                             </div>
-                          </div>
 
-                          <div className="inv-sizes-matrix">
-                            {SIZES.map((size) => {
-                              const colKey = `size_${size.toLowerCase()}`;
-                              const qty = item[colKey] || 0;
-                              return (
-                                <div key={size} className="size-row-pill">
-                                  <span className="size-label">{size}</span>
-                                  <span className="size-qty-num">{qty}</span>
-
-                                  <div className="size-btn-group">
-                                    <button
-                                      type="button"
-                                      className="btn-mini-qty"
-                                      onClick={() =>
-                                        handleStockChange(item.id, size, -1)
-                                      }
-                                      disabled={qty === 0}
-                                      title={`Restar 1 ${size}`}
-                                    >
-                                      -
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="btn-mini-qty"
-                                      onClick={() =>
-                                        handleStockChange(item.id, size, 1)
-                                      }
-                                      title={`Sumar 1 ${size}`}
-                                    >
-                                      +
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.8rem 0.4rem 0.2rem' }}>
+                              <span style={{ fontSize: '0.9rem', color: isLight ? '#0f172a' : '#cbd5e1', fontWeight: 600 }}>
+                                En Existencia:
+                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <button
+                                  type="button"
+                                  className="btn-mini-qty"
+                                  style={{ width: '32px', height: '32px', fontSize: '1rem' }}
+                                  onClick={() => handleOtherStockChange(item.id, -1)}
+                                  disabled={item.quantity === 0}
+                                >
+                                  -
+                                </button>
+                                <strong style={{ fontSize: '1.25rem', minWidth: '32px', textAlign: 'center', color: isLight ? '#0f172a' : '#ffffff' }}>
+                                  {item.quantity}
+                                </strong>
+                                <button
+                                  type="button"
+                                  className="btn-mini-qty"
+                                  style={{ width: '32px', height: '32px', fontSize: '1rem' }}
+                                  onClick={() => handleOtherStockChange(item.id, 1)}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )
+                )}
+
+                {/* 2.3 PLAYMATS Y MOUSEPADS */}
+                {inventorySubTab === 'playmats' && (
+                  otherInventory.filter((i) => i.category === 'Playmats').length === 0 ? (
+                    <div className="empty-box">
+                      No hay tamaños de Playmat o Mousepad guardados todavía. Haz clic arriba en <strong>"+ Agregar Tamaño / Medida"</strong>.
+                    </div>
+                  ) : (
+                    <div className="inventory-matrix-grid" style={{ width: '100%' }}>
+                      {otherInventory.filter((i) => i.category === 'Playmats').map((item) => {
+                        const isLight = isColorLight(item.hex || '#1e293b');
+                        return (
+                          <div
+                            key={item.id}
+                            className={`inventory-matrix-card shirt-colored-card ${isLight ? 'card-theme-light' : 'card-theme-dark'}`}
+                            style={{ '--card-shirt-color': item.hex || '#1e293b' }}
+                          >
+                            <div className="inv-matrix-header">
+                              <div className="inv-matrix-title-wrap">
+                                <span className="inv-color-title">{item.name}</span>
+                                <span className="inv-tag" style={{ background: '#38bdf8', color: '#0f172a', fontWeight: 700 }}>
+                                  {item.spec}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn-remove-shirt-card"
+                                onClick={() => setItemToDelete(item)}
+                                title="Eliminar Playmat"
+                              >
+                                ✕
+                              </button>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.8rem 0.4rem 0.2rem' }}>
+                              <span style={{ fontSize: '0.9rem', color: isLight ? '#0f172a' : '#cbd5e1', fontWeight: 600 }}>
+                                En Existencia:
+                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                                <button
+                                  type="button"
+                                  className="btn-mini-qty"
+                                  style={{ width: '32px', height: '32px', fontSize: '1rem' }}
+                                  onClick={() => handleOtherStockChange(item.id, -1)}
+                                  disabled={item.quantity === 0}
+                                >
+                                  -
+                                </button>
+                                <strong style={{ fontSize: '1.25rem', minWidth: '32px', textAlign: 'center', color: isLight ? '#0f172a' : '#ffffff' }}>
+                                  {item.quantity}
+                                </strong>
+                                <button
+                                  type="button"
+                                  className="btn-mini-qty"
+                                  style={{ width: '32px', height: '32px', fontSize: '1rem' }}
+                                  onClick={() => handleOtherStockChange(item.id, 1)}
+                                >
+                                  +
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )
                 )}
               </section>
             )}
@@ -1039,21 +1096,16 @@ export default function MoneyControl() {
         )}
       </main>
 
-      {/* MODAL: CREAR NUEVO COLOR EN BODEGA */}
+      {/* MODAL: CREAR NUEVO COLOR DE PLAYERA */}
       {isAddShirtModalOpen && (
         <div className="modal-overlay">
           <div className="modal-container add-shirt-modal-container">
             <div className="modal-header">
-              <h3 className="money-form-title">🎨 Crear Nuevo Color en Bodega</h3>
-              <button
-                type="button"
-                className="btn-close-modal"
-                onClick={() => setIsAddShirtModalOpen(false)}
-              >
+              <h3 className="money-form-title">🎨 Crear Nuevo Color de Playera</h3>
+              <button type="button" className="btn-close-modal" onClick={() => setIsAddShirtModalOpen(false)}>
                 ✕
               </button>
             </div>
-
             <form onSubmit={handleCreateShirtSubmit} className="form-flow">
               <div className="form-base-row-step1">
                 <div className="form-group">
@@ -1086,7 +1138,6 @@ export default function MoneyControl() {
                   </div>
                 </div>
               </div>
-
               <div className="form-group">
                 <label>Género / Corte</label>
                 <select
@@ -1095,29 +1146,110 @@ export default function MoneyControl() {
                   onChange={(e) => setNewShirtGender(e.target.value)}
                 >
                   {GENDERS.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
+                    <option key={g} value={g}>{g}</option>
                   ))}
                 </select>
               </div>
-
               <div className="modal-actions-right">
-                <button
-                  type="button"
-                  className="btn-cancel"
-                  onClick={() => setIsAddShirtModalOpen(false)}
-                >
+                <button type="button" className="btn-cancel" onClick={() => setIsAddShirtModalOpen(false)}>
                   Cancelar
                 </button>
-                <button
-                  type="submit"
-                  className="money-btn-submit btn-confirm-table"
-                >
+                <button type="submit" className="money-btn-submit btn-confirm-table">
                   Crear Tarjeta de Color ✓
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CREAR TAZA O PLAYMAT */}
+      {isAddOtherModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-container add-shirt-modal-container">
+            <div className="modal-header">
+              <h3 className="money-form-title">
+                {newOtherCategory === 'Tazas' ? '☕ Nueva Taza en Almacén' : '🖱️ Nuevo Playmat / Pad en Almacén'}
+              </h3>
+              <button type="button" className="btn-close-modal" onClick={() => setIsAddOtherModalOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleCreateOtherSubmit} className="form-flow">
+              <div className="form-base-row-step1">
+                <div className="form-group">
+                  <label>{newOtherCategory === 'Tazas' ? 'Color / Modelo' : 'Nombre del Producto'}</label>
+                  <input
+                    type="text"
+                    className="money-input"
+                    placeholder={newOtherCategory === 'Tazas' ? 'Ej. Blanca con Asa Negra, Mágica Negra...' : 'Ej. Playmat TCG Cosido, Deskmat Gamer...'}
+                    value={newOtherName}
+                    onChange={(e) => setNewOtherName(e.target.value)}
+                    autoFocus
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>{newOtherCategory === 'Tazas' ? 'Capacidad / Tipo' : 'Tamaño / Medidas'}</label>
+                  <input
+                    type="text"
+                    className="money-input"
+                    placeholder={newOtherCategory === 'Tazas' ? 'Ej. 11oz, 15oz, Cónica...' : 'Ej. 60x35cm, 90x40cm, 30x25cm...'}
+                    value={newOtherSpec}
+                    onChange={(e) => setNewOtherSpec(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Color representativo de la tarjeta</label>
+                <div className="color-picker-input-group">
+                  <input
+                    type="color"
+                    className="native-color-picker"
+                    value={newOtherHex}
+                    onChange={(e) => setNewOtherHex(e.target.value)}
+                  />
+                  <input
+                    type="text"
+                    className="money-input"
+                    value={newOtherHex}
+                    onChange={(e) => setNewOtherHex(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-actions-right">
+                <button type="button" className="btn-cancel" onClick={() => setIsAddOtherModalOpen(false)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="money-btn-submit btn-confirm-table">
+                  Guardar en Almacén ✓
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ELIMINAR TAZA / PLAYMAT */}
+      {itemToDelete && (
+        <div className="modal-overlay delete-modal-overlay">
+          <div className="modal-container delete-modal-container">
+            <div className="delete-modal-header">
+              <span className="delete-warning-icon">⚠</span>
+              <h3 className="delete-modal-title">¿Remover del almacén?</h3>
+            </div>
+            <p className="delete-modal-message">
+              Estás a punto de borrar: <strong>{itemToDelete.name}</strong> ({itemToDelete.spec}) con {itemToDelete.quantity} pzas.
+            </p>
+            <div className="delete-modal-actions">
+              <button type="button" className="btn-delete-cancel" onClick={() => setItemToDelete(null)}>
+                Regresar
+              </button>
+              <button type="button" className="btn-delete-confirm" onClick={confirmDeleteOtherItem}>
+                Sí, remover
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1130,17 +1262,13 @@ export default function MoneyControl() {
               <span className="delete-warning-icon">⚠</span>
               <h3 className="delete-modal-title">¿Remover esta tarjeta de bodega?</h3>
             </div>
-
             <p className="delete-modal-message">
               Estás a punto de quitar este color y todas sus tallas del panel de almacén:
             </p>
-
             <div className="delete-preview-card">
               <div className="delete-preview-row">
                 <span className="preview-label">Color:</span>
-                <strong className="preview-val-title">
-                  {shirtToDelete.color}
-                </strong>
+                <strong className="preview-val-title">{shirtToDelete.color}</strong>
               </div>
               <div className="delete-preview-row">
                 <span className="preview-label">Corte:</span>
@@ -1153,20 +1281,11 @@ export default function MoneyControl() {
                 </strong>
               </div>
             </div>
-
             <div className="delete-modal-actions">
-              <button
-                type="button"
-                className="btn-delete-cancel"
-                onClick={cancelDeleteShirt}
-              >
+              <button type="button" className="btn-delete-cancel" onClick={cancelDeleteShirt}>
                 Regresar
               </button>
-              <button
-                type="button"
-                className="btn-delete-confirm"
-                onClick={confirmDeleteShirt}
-              >
+              <button type="button" className="btn-delete-confirm" onClick={confirmDeleteShirt}>
                 Sí, remover tarjeta
               </button>
             </div>
@@ -1182,58 +1301,35 @@ export default function MoneyControl() {
               <span className="delete-warning-icon">⚠</span>
               <h3 className="delete-modal-title">¿Eliminar este movimiento?</h3>
             </div>
-
             <p className="delete-modal-message">
               Estás a punto de borrar permanentemente el siguiente registro del historial:
             </p>
-
             <div className="delete-preview-card">
               <div className="delete-preview-row">
                 <span className="preview-label">Concepto:</span>
-                <strong className="preview-val-title">
-                  {txToDelete.description}
-                </strong>
+                <strong className="preview-val-title">{txToDelete.description}</strong>
               </div>
               <div className="delete-preview-row">
                 <span className="preview-label">Detalle:</span>
                 <span className="preview-val-sub">
-                  {txToDelete.details
-                    ? txToDelete.details.split('__DEDUCTIONS__:')[0]
-                    : txToDelete.category}
+                  {txToDelete.details ? txToDelete.details.split('__DEDUCTIONS__:')[0] : txToDelete.category}
                 </span>
               </div>
               <div className="delete-preview-row">
                 <span className="preview-label">Fecha y Monto:</span>
                 <span className="preview-val-amt">
                   {txToDelete.date} &bull;{' '}
-                  <strong
-                    className={
-                      txToDelete.type === 'income'
-                        ? 'txt-income'
-                        : 'txt-expense'
-                    }
-                  >
-                    {txToDelete.type === 'income'
-                      ? `+${formatMoney(txToDelete.amount)}`
-                      : `-${formatMoney(txToDelete.amount)}`}
+                  <strong className={txToDelete.type === 'income' ? 'txt-income' : 'txt-expense'}>
+                    {txToDelete.type === 'income' ? `+${formatMoney(txToDelete.amount)}` : `-${formatMoney(txToDelete.amount)}`}
                   </strong>
                 </span>
               </div>
             </div>
-
             <div className="delete-modal-actions">
-              <button
-                type="button"
-                className="btn-delete-cancel"
-                onClick={cancelDeleteTx}
-              >
+              <button type="button" className="btn-delete-cancel" onClick={cancelDeleteTx}>
                 Regresar
               </button>
-              <button
-                type="button"
-                className="btn-delete-confirm"
-                onClick={confirmDeleteTx}
-              >
+              <button type="button" className="btn-delete-confirm" onClick={confirmDeleteTx}>
                 Sí, eliminar
               </button>
             </div>
